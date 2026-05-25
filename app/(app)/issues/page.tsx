@@ -7,7 +7,6 @@ import { CardListBody } from "@/src/components/ui/card";
 import { IssueListRow } from "@/src/components/ops/IssueListRow";
 import { IssuesDensityToggle } from "@/src/components/ops/IssuesDensityToggle";
 import { IssuesEmptyState } from "@/src/components/ops/IssuesEmptyState";
-import { IssuesMetricsBar } from "@/src/components/ops/IssuesMetricsBar";
 import { IssuesOverviewTree } from "@/src/components/ops/IssuesOverviewTree";
 import { PageHeader } from "@/src/components/layout/PageHeader";
 import { IssuesQueueControls } from "@/src/components/ops/IssuesQueueControls";
@@ -83,9 +82,8 @@ export default async function IssuesPage({
 
       {overview ? (
         <section className="rounded-lg border border-border bg-card shadow-card">
-          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+          <div className="border-b border-border px-4 py-2.5">
             <p className="text-xs font-medium text-muted-foreground">Operational overview</p>
-            <IssuesMetricsBar stats={overview.totals} />
           </div>
           <IssuesOverviewTree tree={overview} />
         </section>

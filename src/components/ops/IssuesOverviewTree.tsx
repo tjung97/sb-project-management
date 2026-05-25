@@ -1,14 +1,15 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { IssueStatsDots } from "@/src/components/ops/IssueStatsDots";
 import { LocationKindBadge } from "@/src/components/ops/LocationKindBadge";
 import { Button } from "@/src/components/ui/button";
 import {
   allOverviewLocationIds,
   allOverviewProjectKeys,
+  type IssueBucket,
   type OpsOverviewTree,
   type OverviewIssueNode,
   type OverviewLocationNode,
@@ -18,52 +19,83 @@ import { cn } from "@/src/lib/utils";
 const TREE_TOGGLE_MS = 220;
 
 const BUCKET_MARKER: Record<string, { pill: string; label: string }> = {
-  open: {
-    pill: "bg-info/12 text-info ring-info/25",
-    label: "Open",
-  },
-  urgent: {
-    pill: "bg-destructive/15 text-destructive ring-destructive/35",
-    label: "Urgent",
-  },
-  blocked: {
-    pill: "bg-destructive/10 text-destructive/90 ring-destructive/20",
-    label: "Blocked",
-  },
-  overdue: {
-    pill: "bg-warning/15 text-warning ring-warning/30",
-    label: "Overdue",
-  },
-  done: {
-    pill: "bg-success/10 text-success ring-success/25",
-    label: "Done",
-  },
+  open: { pill: "bg-info/12 text-info ring-info/25", label: "Open" },
+  urgent: { pill: "bg-destructive/15 text-destructive ring-destructive/35", label: "Urgent" },
+  blocked: { pill: "bg-destructive/10 text-destructive/90 ring-destructive/20", label: "Blocked" },
+  overdue: { pill: "bg-warning/15 text-warning ring-warning/30", label: "Overdue" },
+  done: { pill: "bg-success/10 text-success ring-success/25", label: "Done" },
 };
+
+const STAT_PILLS: {
+  key: IssueBucket;
+  label: string;
+  dot: string;
+  activeClass: string;
+}[] = [
+  { key: "open", label: "Open", dot: "bg-info", activeClass: "border-info/40 bg-info/10 text-info" },
+  { key: "urgent", label: "Urgent", dot: "bg-destructive", activeClass: "border-destructive/40 bg-destructive/10 text-destructive" },
+  { key: "blocked", label: "Blocked", dot: "bg-destructive/70", activeClass: "border-destructive/30 bg-destructive/10 text-destructive/90" },
+  { key: "overdue", label: "Overdue", dot: "bg-warning", activeClass: "border-warning/40 bg-warning/10 text-warning" },
+  { key: "done", label: "Done", dot: "bg-success", activeClass: "border-success/30 bg-success/10 text-success" },
+];
 
 export function IssuesOverviewTree({ tree }: { tree: OpsOverviewTree }) {
   const [treeOpen, setTreeOpen] = useState(false);
   const [openLocations, setOpenLocations] = useState(() => new Set<string>());
   const [openProjects, setOpenProjects] = useState(() => new Set<string>());
+  const [activeBucket, setActiveBucket] = useState<IssueBucket | null>(null);
   const toggleLockRef = useRef(false);
 
-  const toggleTree = useCallback(() => {
+  const allLocationIds = useMemo(() => allOverviewLocationIds(tree), [tree]);
+  const allProjectKeys = useMemo(() => allOverviewProjectKeys(tree), [tree]);
+
+  const isAllExpanded = useMemo(() => {
+    if (!treeOpen) return false;
+    for (const id of allLocationIds) if (!openLocations.has(id)) return false;
+    for (const key of allProjectKeys) if (!openProjects.has(key)) return false;
+    return true;
+  }, [treeOpen, openLocations, openProjects, allLocationIds, allProjectKeys]);
+
+  function toggleExpandCollapse() {
     if (toggleLockRef.current) return;
     toggleLockRef.current = true;
-    setTreeOpen((open) => !open);
-    window.setTimeout(() => {
-      toggleLockRef.current = false;
-    }, TREE_TOGGLE_MS);
-  }, []);
+    setTimeout(() => { toggleLockRef.current = false; }, TREE_TOGGLE_MS);
 
-  function expandAll() {
-    setTreeOpen(true);
-    setOpenLocations(allOverviewLocationIds(tree));
-    setOpenProjects(allOverviewProjectKeys(tree));
+    if (isAllExpanded) {
+      setTreeOpen(false);
+      setOpenLocations(new Set());
+      setOpenProjects(new Set());
+      setActiveBucket(null);
+    } else {
+      setTreeOpen(true);
+      setOpenLocations(allLocationIds);
+      setOpenProjects(allProjectKeys);
+    }
   }
 
-  function collapseAll() {
-    setOpenLocations(new Set());
-    setOpenProjects(new Set());
+  function selectBucket(bucket: IssueBucket) {
+    if (activeBucket === bucket) {
+      setActiveBucket(null);
+      return;
+    }
+    setActiveBucket(bucket);
+    setTreeOpen(true);
+
+    const locIds = new Set<string>();
+    const projKeys = new Set<string>();
+    for (const loc of tree.locations) {
+      const allIssues = [...loc.projects.flatMap((p) => p.issues), ...loc.unlinkedIssues];
+      if (allIssues.some((i) => i.bucket === bucket)) {
+        locIds.add(loc.id);
+        for (const proj of loc.projects) {
+          if (proj.issues.some((i) => i.bucket === bucket)) {
+            projKeys.add(`${loc.id}:${proj.id}`);
+          }
+        }
+      }
+    }
+    setOpenLocations(locIds);
+    setOpenProjects(projKeys);
   }
 
   function toggleLocation(id: string) {
@@ -88,44 +120,46 @@ export function IssuesOverviewTree({ tree }: { tree: OpsOverviewTree }) {
     return <p className="px-4 py-6 text-sm text-muted-foreground">No operational work in your scope right now.</p>;
   }
 
+  const { totals } = tree;
+
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">{tree.scopeLabel}</span>
-            <span className="text-muted-foreground/70"> · {tree.locations.length} locations</span>
-          </span>
-          <IssueStatsDots stats={tree.totals} hrefPrefix="/issues" size="xs" />
+        <div className="flex flex-wrap items-center gap-1.5">
+          {STAT_PILLS.filter((pill) => totals[pill.key] > 0).map((pill) => {
+            const isActive = activeBucket === pill.key;
+            return (
+              <button
+                key={pill.key}
+                type="button"
+                onClick={() => selectBucket(pill.key)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs transition hover:bg-accent/50",
+                  isActive ? pill.activeClass : "text-muted-foreground"
+                )}
+              >
+                <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", pill.dot)} aria-hidden />
+                <span>{pill.label}</span>
+                <span className="font-semibold tabular-nums text-foreground">{totals[pill.key]}</span>
+              </button>
+            );
+          })}
         </div>
-        <div className="flex flex-wrap items-center gap-1">
-          {treeOpen ? (
-            <>
-              <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[11px]" onClick={expandAll}>
-                <ChevronsUpDown className="h-3 w-3" aria-hidden />
-                Expand all
-              </Button>
-              <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[11px]" onClick={collapseAll}>
-                <ChevronsDownUp className="h-3 w-3" aria-hidden />
-                Collapse all
-              </Button>
-            </>
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 gap-1 px-2.5 text-xs"
-            onClick={toggleTree}
-            aria-expanded={treeOpen}
-          >
-            <ChevronRight
-              className={cn("h-3.5 w-3.5 transition-transform duration-200 ease-out", treeOpen && "rotate-90")}
-              aria-hidden
-            />
-            {treeOpen ? "Collapse" : "Expand"}
-          </Button>
-        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1 px-2.5 text-xs"
+          onClick={toggleExpandCollapse}
+          aria-expanded={isAllExpanded}
+        >
+          <ChevronRight
+            className={cn("h-3.5 w-3.5 transition-transform duration-200 ease-out", isAllExpanded && "rotate-90")}
+            aria-hidden
+          />
+          {isAllExpanded ? "Collapse all" : "Expand all"}
+        </Button>
       </div>
 
       <div
@@ -144,6 +178,7 @@ export function IssuesOverviewTree({ tree }: { tree: OpsOverviewTree }) {
                 onToggle={() => toggleLocation(location.id)}
                 openProjects={openProjects}
                 onToggleProject={toggleProject}
+                activeBucket={activeBucket}
               />
             ))}
           </div>
@@ -159,13 +194,23 @@ function LocationSection({
   onToggle,
   openProjects,
   onToggleProject,
+  activeBucket,
 }: {
   location: OverviewLocationNode;
   open: boolean;
   onToggle: () => void;
   openProjects: Set<string>;
   onToggleProject: (key: string) => void;
+  activeBucket: IssueBucket | null;
 }) {
+  const filteredProjects = activeBucket
+    ? location.projects.filter((p) => p.issues.some((i) => i.bucket === activeBucket))
+    : location.projects;
+
+  const filteredUnlinked = activeBucket
+    ? location.unlinkedIssues.filter((i) => i.bucket === activeBucket)
+    : location.unlinkedIssues;
+
   return (
     <section>
       <button
@@ -187,10 +232,13 @@ function LocationSection({
         )}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="border-l border-border/80 pb-2 pl-5 ml-5 mr-2">
-            {location.projects.map((project) => {
+          <div className="border-l border-border/80 ml-5 mr-2 pb-2 pl-5">
+            {filteredProjects.map((project) => {
               const key = `${location.id}:${project.id}`;
               const projectOpen = openProjects.has(key);
+              const filteredIssues = activeBucket
+                ? project.issues.filter((i) => i.bucket === activeBucket)
+                : project.issues;
               return (
                 <div key={project.id}>
                   <button
@@ -216,11 +264,11 @@ function LocationSection({
                     )}
                   >
                     <div className="min-h-0 overflow-hidden">
-                      <div className="border-l border-dashed border-border/70 ml-4 pl-3">
-                        {project.issues.map((issue) => (
+                      <div className="ml-4 border-l border-dashed border-border/70 pl-3">
+                        {filteredIssues.map((issue) => (
                           <IssueStrip key={issue.id} issue={issue} />
                         ))}
-                        {project.issues.length === 0 ? (
+                        {filteredIssues.length === 0 ? (
                           <p className="py-1 text-xs text-muted-foreground">No issues in this project here.</p>
                         ) : null}
                       </div>
@@ -230,11 +278,11 @@ function LocationSection({
               );
             })}
 
-            {location.unlinkedIssues.length > 0 ? (
+            {filteredUnlinked.length > 0 ? (
               <div className="mt-1">
                 <p className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">No project</p>
-                <div className="border-l border-dashed border-border/70 ml-2 pl-3">
-                  {location.unlinkedIssues.map((issue) => (
+                <div className="ml-2 border-l border-dashed border-border/70 pl-3">
+                  {filteredUnlinked.map((issue) => (
                     <IssueStrip key={issue.id} issue={issue} />
                   ))}
                 </div>

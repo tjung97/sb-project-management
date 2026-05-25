@@ -157,9 +157,13 @@ export function buildOpsOverviewTree(
   issues: IssueWithId[],
   now = new Date()
 ): OpsOverviewTree {
-  const readableIssues = issues.filter((issue) => canReadIssue(user, issue));
+  const readableIssues = issues.filter((issue) => canReadIssue(user, issue) && issue.status !== "closed");
   const visibleLocations = visibleOverviewLocations(user, locations, readableIssues, projects);
-  const totals = statsFromIssues(readableIssues, now);
+  const visibleLocationIds = new Set(visibleLocations.map((l) => l.id));
+  // Totals only cover issues that actually appear in the tree (within a visible location).
+  // Issues with no location_id or an unknown location are excluded so pill counts stay accurate.
+  const treeIssues = readableIssues.filter((i) => i.location_id && visibleLocationIds.has(i.location_id));
+  const totals = statsFromIssues(treeIssues, now);
 
   const locationNodes: OverviewLocationNode[] = visibleLocations.map((location) => {
     const atLocation = readableIssues.filter((issue) => issue.location_id === location.id);
