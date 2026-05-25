@@ -1,0 +1,149 @@
+rules_version = '2';
+
+// Ops app rules for issues/projects. Merge with seoul-bowl-orders rules before deploy
+// so existing collections (orders, etc.) keep their access patterns.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.role == "admin";
+    }
+
+    function hasLocationAccess(locationId) {
+      return isAdmin()
+        || (request.auth.token.storeIds != null && locationId in request.auth.token.storeIds)
+        || (request.auth.token.storeId != null && locationId == request.auth.token.storeId);
+    }
+
+    function issueVisible() {
+      return isAdmin()
+        || resource.data.created_by_uid == request.auth.uid
+        || request.auth.uid in resource.data.assignee_uids
+        || request.auth.uid in resource.data.watcher_uids
+        || (resource.data.location_id != null && hasLocationAccess(resource.data.location_id));
+    }
+
+    function issueWritable() {
+      return isAdmin()
+        || resource.data.created_by_uid == request.auth.uid
+        || request.auth.uid in resource.data.assignee_uids
+        || (resource.data.location_id != null && hasLocationAccess(resource.data.location_id));
+    }
+
+    function issueDocVisible(issueId) {
+      let issue = get(/databases/$(database)/documents/issues/$(issueId));
+      return isAdmin()
+        || issue.data.created_by_uid == request.auth.uid
+        || request.auth.uid in issue.data.assignee_uids
+        || request.auth.uid in issue.data.watcher_uids
+        || (issue.data.location_id != null && hasLocationAccess(issue.data.location_id));
+    }
+
+    match /counters/{counterId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /userProfiles/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow write: if isAdmin();
+    }
+
+    match /locations/{locationId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /labels/{labelId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /projects/{projectId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+
+      match /activity/{activityId} {
+        allow read: if signedIn();
+        allow create: if signedIn();
+        allow update, delete: if false;
+      }
+    }
+
+    match /issues/{issueId} {
+      allow read: if signedIn() && issueVisible();
+      allow create: if signedIn();
+      allow update: if signedIn() && issueWritable();
+      allow delete: if isAdmin();
+
+      match /comments/{commentId} {
+        allow read: if signedIn() && issueDocVisible(issueId);
+        allow create: if signedIn() && issueDocVisible(issueId);
+        allow update, delete: if isAdmin() || resource.data.author_uid == request.auth.uid;
+      }
+
+      match /activity/{activityId} {
+        allow read: if signedIn() && issueDocVisible(issueId);
+        allow create: if false;
+        allow update, delete: if false;
+      }
+
+      match /checklist/{itemId} {
+        allow read: if signedIn() && issueDocVisible(issueId);
+        allow create, update: if false;
+        allow delete: if false;
+      }
+    }
+
+    match /notificationEvents/{eventId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /notificationInbox/{inboxId} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    match /notificationPreferences/{uid} {
+      allow read, write: if isAdmin() || (signedIn() && request.auth.uid == uid);
+    }
+
+    match /recurringTemplates/{templateId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /pilotFeedback/{feedbackId} {
+      allow read: if isAdmin();
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /employees/{employeeId} {
+      allow read, write: if isAdmin();
+
+      match /folders/{folderId} {
+        allow read, write: if isAdmin();
+      }
+
+      match /documents/{documentId} {
+        allow read, write: if isAdmin();
+      }
+
+      match /feedback/{feedbackId} {
+        allow read, write: if isAdmin();
+      }
+
+      match /compEntries/{entryId} {
+        allow read, write: if isAdmin();
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

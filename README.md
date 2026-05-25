@@ -1,4 +1,13 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Seoul Bowl Ops
+
+Internal operations console for issues, projects, and multi-location follow-up.
+
+## Documentation
+
+| Doc | Description |
+|-----|-------------|
+| [Design system](docs/DESIGN_SYSTEM.md) | UI foundations, components, patterns, and quality checklist |
+| [Production runbook](docs/PRODUCTION_RUNBOOK.md) | Safe Firebase deploy and shared-project guidance |
 
 ## Getting Started
 
