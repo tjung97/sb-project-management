@@ -1,0 +1,57 @@
+runConfig:
+  runtime: nodejs22
+
+env:
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: AIzaSyAgUVHegxObHp_yxm1jeJx-z471XEK1nq8
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: seoul-bowl-orders.firebaseapp.com
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: seoul-bowl-orders
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: seoul-bowl-orders.firebasestorage.app
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "1094423785414"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: 1:1094423785414:web:0dee2450ec3dba7ef70cc7
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: EMAIL_FROM
+    value: "Seoul Bowl Ops <ops@seoulbowl.com>"
+    availability:
+      - RUNTIME
+
+  # FIREBASE_SERVICE_ACCOUNT_KEY is intentionally omitted here.
+  # Firebase App Hosting provides Application Default Credentials automatically,
+  # which the admin SDK uses via the applicationDefault() fallback in src/lib/firebase/admin.ts.
+
+  # Optional: uncomment and configure these secrets via:
+  #   npx firebase-tools apphosting:secrets:set RESEND_API_KEY --project seoul-bowl-orders
+  #   npx firebase-tools apphosting:secrets:set SLACK_WEBHOOK_URL --project seoul-bowl-orders
+  #
+  # - variable: RESEND_API_KEY
+  #   secret: RESEND_API_KEY
+  # - variable: SLACK_WEBHOOK_URL
+  #   secret: SLACK_WEBHOOK_URL
