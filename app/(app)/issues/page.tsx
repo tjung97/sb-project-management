@@ -8,6 +8,7 @@ import { IssueListRow } from "@/src/components/ops/IssueListRow";
 import { IssuesDensityToggle } from "@/src/components/ops/IssuesDensityToggle";
 import { IssuesEmptyState } from "@/src/components/ops/IssuesEmptyState";
 import { IssuesOverviewTree } from "@/src/components/ops/IssuesOverviewTree";
+import { WorkQueueSection } from "@/src/components/ops/WorkQueueSection";
 import { PageHeader } from "@/src/components/layout/PageHeader";
 import { IssuesQueueControls } from "@/src/components/ops/IssuesQueueControls";
 import { getCurrentUser } from "@/src/lib/firebase/auth-server";
@@ -37,7 +38,7 @@ export default async function IssuesPage({
   const locationById = new Map(locations.map((location) => [location.id, location]));
   const userById = new Map(users.map((user) => [user.uid, user]));
   const labelById = new Map(labels.map((label) => [label.id, label]));
-  const compact = one(params.density) === "compact";
+  const compact = one(params.density) !== "comfortable";
   const activeFilters = hasActiveFilters(filters);
   const issueNumberQuery = filters.q?.trim().match(/^#?(\d+)$/)?.[1];
   const quickIssue = issueNumberQuery ? await getIssueByNumber(Number(issueNumberQuery)) : null;
@@ -57,9 +58,6 @@ export default async function IssuesPage({
         defaultQuery={filters.q ?? ""}
         resultCount={issues.length}
         userUid={user?.uid ?? null}
-        users={filterLookups.users}
-        locations={filterLookups.locations}
-        projects={filterLookups.projects}
         activeFilters={activeFilters}
       />
 
@@ -99,14 +97,13 @@ export default async function IssuesPage({
         </Link>
       ) : null}
 
-      <details className="overflow-hidden rounded-lg border border-border bg-card shadow-card" open>
-        <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">
-          Work queue
-          <span className="ml-2 font-normal text-muted-foreground">
-            ({issues.length} issue{issues.length === 1 ? "" : "s"}
-            {activeFilters ? ", filtered" : ""})
-          </span>
-        </summary>
+      <WorkQueueSection
+        issueCount={issues.length}
+        activeFilters={activeFilters}
+        users={filterLookups.users}
+        locations={filterLookups.locations}
+        projects={filterLookups.projects}
+      >
         <CardListBody className="border-t border-border transition-opacity duration-150">
           {issues.length === 0 ? (
             <IssuesEmptyState hasFilters={activeFilters} />
@@ -132,7 +129,7 @@ export default async function IssuesPage({
             <IssuesDensityToggle />
           </Suspense>
         </div>
-      </details>
+      </WorkQueueSection>
     </div>
   );
 }

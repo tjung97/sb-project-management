@@ -7,11 +7,11 @@ export function IssuesDensityToggle() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const compact = searchParams.get("density") === "compact";
+  const compact = searchParams.get("density") !== "comfortable";
 
   function setDensity(next: "comfortable" | "compact") {
     const params = new URLSearchParams(searchParams.toString());
-    if (next === "compact") params.set("density", "compact");
+    if (next === "comfortable") params.set("density", "comfortable");
     else params.delete("density");
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
