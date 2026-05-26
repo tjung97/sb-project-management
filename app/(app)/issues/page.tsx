@@ -9,6 +9,7 @@ import { IssuesDensityToggle } from "@/src/components/ops/IssuesDensityToggle";
 import { IssuesEmptyState } from "@/src/components/ops/IssuesEmptyState";
 import { IssuesOverviewTree } from "@/src/components/ops/IssuesOverviewTree";
 import { WorkQueueSection } from "@/src/components/ops/WorkQueueSection";
+import { IssueUnreadHighlighter } from "@/src/components/ops/IssueUnreadHighlighter";
 import { PageHeader } from "@/src/components/layout/PageHeader";
 import { IssuesQueueControls } from "@/src/components/ops/IssuesQueueControls";
 import { getCurrentUser } from "@/src/lib/firebase/auth-server";
@@ -97,6 +98,7 @@ export default async function IssuesPage({
         </Link>
       ) : null}
 
+      <IssueUnreadHighlighter />
       <WorkQueueSection
         issueCount={issues.length}
         activeFilters={activeFilters}

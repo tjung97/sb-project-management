@@ -3,10 +3,9 @@ import { Flame, MessageSquare } from "lucide-react";
 import { AvatarStack } from "@/src/components/ops/AvatarStack";
 import { LocationKindBadge } from "@/src/components/ops/LocationKindBadge";
 import { PriorityBadge, StatusBadge } from "@/src/components/issues/IssueBadges";
-import { StatusIndicator, statusDotClassName } from "@/src/components/issues/StatusIndicator";
 import { Badge } from "@/src/components/ui/badge";
 import { formatDate, formatIssueNumber, formatRelativeTime } from "@/src/lib/ops/format";
-import { isUrgentPriority, locationBorderClass, priorityBorderClass, priorityRowClass } from "@/src/lib/ops/semantic";
+import { isUrgentPriority, priorityRowClass, statusBorderClass } from "@/src/lib/ops/semantic";
 import { cn } from "@/src/lib/utils";
 import type { IssueWithId, LabelWithId, LocationWithId, ProjectWithId, UserProfile } from "@/src/types/firestore";
 
@@ -34,8 +33,8 @@ export function IssueListRow({
   const labelOverflow = visibleLabels.length > 2 ? visibleLabels.length - 2 : 0;
 
   const rowBase = cn(
-    "block border-l-4 transition-colors duration-150",
-    urgent ? priorityBorderClass("urgent") : locationBorderClass(location?.kind),
+    "issue-row relative isolate block overflow-hidden border-l-4 transition-[background-color,box-shadow] duration-150",
+    statusBorderClass(issue.status),
     priorityRowClass(issue.priority),
     !urgent && "hover:bg-accent/40",
     blocked && !urgent && "bg-destructive/5",
@@ -43,14 +42,16 @@ export function IssueListRow({
   );
 
   if (compact) {
+    const hasPreview = issue.comment_count > 0 && issue.last_comment_preview;
     return (
-      <Link href={`/issues/${issue.id}`} className={cn(rowBase, "px-4 py-2.5")}>
-        {/* Line 1: status dot · [urgent label] · title · #num · due · comments */}
+      <Link
+        href={`/issues/${issue.id}`}
+        className={cn(rowBase, "group px-4 py-2.5")}
+        data-issue-id={issue.id}
+        data-updated-at={issue.updated_at.toMillis()}
+      >
+        {/* Line 1: [urgent label] · title · #num · due · comments */}
         <div className="flex min-w-0 items-center gap-2">
-          <span
-            className={cn("h-2 w-2 shrink-0 rounded-full", statusDotClassName(issue.status))}
-            aria-label={issue.status}
-          />
           {urgent && (
             <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-semibold uppercase tracking-wide text-destructive">
               <Flame className="h-3 w-3" aria-hidden />
@@ -59,11 +60,15 @@ export function IssueListRow({
           )}
           <span
             className={cn(
-              "min-w-0 flex-1 truncate text-sm font-medium",
-              done ? "text-muted-foreground line-through decoration-muted-foreground/50" : urgent ? "text-destructive" : "text-foreground",
+              "issue-title min-w-0 flex-1 truncate text-sm font-medium",
+              done ? "text-muted-foreground line-through decoration-muted-foreground/50" : urgent ? "text-destructive" : "text-foreground/90",
             )}
           >
             {issue.title}
+          </span>
+          <span className="issue-unread-pill" aria-hidden="true">
+            <span className="issue-unread-pill-dot" />
+            New
           </span>
           <span className="shrink-0 font-mono text-[11px] text-muted-foreground/70">
             {formatIssueNumber(issue)}
@@ -98,24 +103,64 @@ export function IssueListRow({
           </span>
           <AvatarStack uids={issue.assignee_uids} usersById={userById} max={3} />
         </div>
+
+        {/* Comment preview: slides in on hover */}
+        {hasPreview && (
+          <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-200 ease-out group-hover:grid-rows-[1fr] group-focus-within:grid-rows-[1fr] motion-reduce:transition-none">
+            <div className="min-h-0 overflow-hidden">
+              <div className="issue-comment-glass mt-1.5 flex items-start gap-2 rounded-md px-3 py-2">
+                <MessageSquare className="mt-px h-3.5 w-3.5 shrink-0 text-muted-foreground/60" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <div className="mb-0.5 flex items-center gap-1.5">
+                    <span className="text-[11px] font-medium text-foreground/80">
+                      {issue.last_comment_author_name ?? "Someone"}
+                    </span>
+                    {issue.last_comment_at && (
+                      <span className="text-[11px] text-muted-foreground/60">
+                        {formatRelativeTime(issue.last_comment_at, new Date())}
+                      </span>
+                    )}
+                    {issue.comment_count > 1 && (
+                      <span className="ml-auto shrink-0 text-[11px] text-muted-foreground/50">
+                        +{issue.comment_count - 1} more
+                      </span>
+                    )}
+                  </div>
+                  <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                    {issue.last_comment_preview}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </Link>
     );
   }
 
   // Comfortable layout: 3-line card with full badges and activity summary
   return (
-    <Link href={`/issues/${issue.id}`} className={cn(rowBase, "px-5 py-4")}>
+    <Link
+      href={`/issues/${issue.id}`}
+      className={cn(rowBase, "px-5 py-4")}
+      data-issue-id={issue.id}
+      data-updated-at={issue.updated_at.toMillis()}
+    >
       {/* Line 1: status + priority badges */}
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge status={issue.status} showPulse />
         <PriorityBadge priority={issue.priority} prominent={urgent} />
+        <span className="issue-unread-pill" aria-hidden="true">
+          <span className="issue-unread-pill-dot" />
+          New
+        </span>
       </div>
 
       {/* Line 2: title + right meta */}
       <div className="mt-2.5 flex items-start gap-4">
         <h2
           className={cn(
-            "min-w-0 flex-1 text-base font-medium leading-snug",
+            "issue-title min-w-0 flex-1 text-base font-medium leading-snug",
             urgent ? "text-destructive" : done ? "text-muted-foreground" : "text-foreground",
           )}
         >

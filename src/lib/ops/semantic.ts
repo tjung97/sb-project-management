@@ -1,4 +1,4 @@
-import type { IssuePriority, LocationKind, UserRole } from "@/src/types/firestore";
+import type { IssuePriority, IssueStatus, LocationKind, UserRole } from "@/src/types/firestore";
 
 export const roleStyles: Record<
   UserRole,
@@ -55,6 +55,16 @@ export const locationKindStyles: Record<
 export function locationBorderClass(kind: LocationKind | undefined) {
   if (!kind) return "border-l-transparent";
   return locationKindStyles[kind].borderClass;
+}
+
+export function statusBorderClass(status: IssueStatus): string {
+  switch (status) {
+    case "in_progress": return "border-l-info";
+    case "blocked":     return "border-l-destructive";
+    case "done":        return "border-l-success";
+    case "closed":      return "border-l-success/50";
+    default:            return "border-l-border"; // open
+  }
 }
 
 export const priorityStyles: Record<
