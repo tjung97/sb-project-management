@@ -31,6 +31,7 @@ export function parseIssueFilters(params: Record<string, string | string[] | und
     priority: one(params.priority) as IssueFilters["priority"],
     label: one(params.label),
     due: one(params.due) as IssueFilters["due"],
+    stale: one(params.stale) as IssueFilters["stale"],
     q: one(params.q),
     unassigned: one(params.unassigned) === "1",
   };
@@ -46,6 +47,7 @@ export function filtersToSearchParams(filters: IssueFilters, extra?: Record<stri
   if (filters.priority) params.set("priority", filters.priority);
   if (filters.label) params.set("label", filters.label);
   if (filters.due) params.set("due", filters.due);
+  if (filters.stale) params.set("stale", filters.stale);
   if (filters.q?.trim()) params.set("q", filters.q.trim());
   if (extra?.density) params.set("density", extra.density);
   return params;
@@ -67,6 +69,7 @@ export function hasActiveFilters(filters: IssueFilters) {
     Boolean(filters.priority) ||
     Boolean(filters.label) ||
     Boolean(filters.due) ||
+    Boolean(filters.stale) ||
     Boolean(filters.q?.trim())
   );
 }
@@ -107,6 +110,8 @@ export function activeFilterChips(
     const label = DUE_OPTIONS.find((option) => option.value === filters.due)?.label ?? filters.due;
     chips.push({ key: "due", label: `Due: ${label}` });
   }
+  if (filters.stale === "blocked_72h") chips.push({ key: "stale", label: "Blocked 72h+" });
+  if (filters.stale === "unassigned_48h") chips.push({ key: "stale", label: "Unassigned 48h+" });
   if (filters.q?.trim()) chips.push({ key: "q", label: `Search: ${filters.q.trim()}` });
   return chips;
 }
@@ -134,6 +139,9 @@ export function clearFilterKey(filters: IssueFilters, key: string): IssueFilters
       break;
     case "due":
       next.due = undefined;
+      break;
+    case "stale":
+      next.stale = undefined;
       break;
     case "q":
       next.q = undefined;
@@ -164,7 +172,7 @@ export function matchesSavedView(
   for (const [key, value] of expected.entries()) {
     if (one(current[key]) !== value) return false;
   }
-  const currentKeys = ["status", "assignee", "unassigned", "location", "project", "priority", "due"];
+  const currentKeys = ["status", "assignee", "unassigned", "location", "project", "priority", "due", "stale"];
   for (const key of currentKeys) {
     if (!expected.has(key) && one(current[key])) return false;
   }

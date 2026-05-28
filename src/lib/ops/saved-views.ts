@@ -7,10 +7,22 @@ export interface SavedView {
 
 export const SAVED_VIEWS: SavedView[] = [
   {
+    id: "my-work",
+    label: "My open work",
+    description: "All open issues assigned to you",
+    params: { status: "openish", assignee: "__me__" },
+  },
+  {
     id: "my-blocked",
     label: "My blocked",
     description: "Open issues assigned to you that are blocked",
     params: { status: "blocked", assignee: "__me__" },
+  },
+  {
+    id: "my-due-week",
+    label: "My due this week",
+    description: "Open issues assigned to you and due within seven days",
+    params: { status: "openish", assignee: "__me__", due: "week" },
   },
   {
     id: "urgent-store",
@@ -36,6 +48,24 @@ export const SAVED_VIEWS: SavedView[] = [
     description: "Open work due within seven days",
     params: { status: "openish", due: "week" },
   },
+  {
+    id: "needs-owner",
+    label: "Needs owner",
+    description: "Open work without an assignee",
+    params: { status: "openish", unassigned: "1" },
+  },
+  {
+    id: "blocked-72h",
+    label: "Blocked 72h+",
+    description: "Blocked issues that have not moved in 72 hours",
+    params: { status: "blocked", stale: "blocked_72h" },
+  },
+  {
+    id: "recently-updated",
+    label: "Recently updated",
+    description: "Newest open work across your scope",
+    params: { status: "openish" },
+  },
 ];
 
 export function savedViewHref(view: SavedView, userUid: string | null) {
@@ -48,4 +78,3 @@ export function savedViewHref(view: SavedView, userUid: string | null) {
   const query = params.toString();
   return query ? `/issues?${query}` : "/issues";
 }
-

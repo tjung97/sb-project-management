@@ -3,6 +3,7 @@ import { Flame, MessageSquare } from "lucide-react";
 import { AvatarStack } from "@/src/components/ops/AvatarStack";
 import { LocationKindBadge } from "@/src/components/ops/LocationKindBadge";
 import { PriorityBadge, StatusBadge } from "@/src/components/issues/IssueBadges";
+import { RowStatusPicker } from "@/src/components/issues/RowStatusPicker";
 import { Badge } from "@/src/components/ui/badge";
 import { formatDate, formatIssueNumber, formatRelativeTime } from "@/src/lib/ops/format";
 import { isUrgentPriority, priorityRowClass, statusBorderClass } from "@/src/lib/ops/semantic";
@@ -31,6 +32,9 @@ export function IssueListRow({
   const done = issue.status === "done" || issue.status === "closed";
   const visibleLabels = issueLabels.filter(Boolean) as LabelWithId[];
   const labelOverflow = visibleLabels.length > 2 ? visibleLabels.length - 2 : 0;
+  const actionText = issue.status === "blocked"
+    ? issue.next_step || issue.blocked_reason
+    : issue.next_step;
 
   const rowBase = cn(
     "issue-row relative isolate block overflow-hidden border-l-4 transition-[background-color,box-shadow] duration-150",
@@ -50,8 +54,9 @@ export function IssueListRow({
         data-issue-id={issue.id}
         data-updated-at={issue.updated_at.toMillis()}
       >
-        {/* Line 1: [urgent label] · title · #num · due · comments */}
+        {/* Line 1: [status picker] · [urgent label] · title · #num · due · comments */}
         <div className="flex min-w-0 items-center gap-2">
+          <RowStatusPicker issueId={issue.id} currentStatus={issue.status} />
           {urgent && (
             <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-semibold uppercase tracking-wide text-destructive">
               <Flame className="h-3 w-3" aria-hidden />
@@ -104,6 +109,18 @@ export function IssueListRow({
           <AvatarStack uids={issue.assignee_uids} usersById={userById} max={3} />
         </div>
 
+        {actionText ? (
+          <p
+            className={cn(
+              "mt-1 truncate text-[11px]",
+              blocked ? "font-medium text-destructive/85" : "text-muted-foreground"
+            )}
+          >
+            {blocked ? "Blocked: " : "Next: "}
+            {actionText}
+          </p>
+        ) : null}
+
         {/* Comment preview: slides in on hover */}
         {hasPreview && (
           <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-200 ease-out group-hover:grid-rows-[1fr] group-focus-within:grid-rows-[1fr] motion-reduce:transition-none">
@@ -146,8 +163,9 @@ export function IssueListRow({
       data-issue-id={issue.id}
       data-updated-at={issue.updated_at.toMillis()}
     >
-      {/* Line 1: status + priority badges */}
+      {/* Line 1: status picker + priority badges */}
       <div className="flex flex-wrap items-center gap-2">
+        <RowStatusPicker issueId={issue.id} currentStatus={issue.status} />
         <StatusBadge status={issue.status} showPulse />
         <PriorityBadge priority={issue.priority} prominent={urgent} />
         <span className="issue-unread-pill" aria-hidden="true">
@@ -194,6 +212,19 @@ export function IssueListRow({
       </div>
 
       {/* Line 4: last activity */}
+      {actionText ? (
+        <p
+          className={cn(
+            "mt-2 rounded-md border px-3 py-2 text-xs",
+            blocked
+              ? "border-destructive/20 bg-destructive/5 font-medium text-destructive/90"
+              : "border-border/70 bg-secondary/35 text-muted-foreground"
+          )}
+        >
+          {blocked ? "Blocked: " : "Next: "}
+          {actionText}
+        </p>
+      ) : null}
       <p className="mt-1.5 text-xs text-muted-foreground">{issue.last_activity_summary}</p>
     </Link>
   );

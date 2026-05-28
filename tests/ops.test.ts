@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { avatarColor, initials } from "@/src/lib/ops/avatar";
+import { attachmentKindFromName, attachmentKindLabel, buildLinkAttachment, formatAttachmentSize } from "@/src/lib/ops/attachments";
 import { activityToCsvRows, issuesToCsvRows, toCsv } from "@/src/lib/ops/export";
 import { formatDate, formatIssueNumber, formatRelativeTime, markdownPreview, priorityLabel, statusLabel } from "@/src/lib/ops/format";
 import {
@@ -28,6 +29,7 @@ import {
 } from "@/src/lib/ops/mentions";
 import { getIssueTemplate, ISSUE_TEMPLATES } from "@/src/lib/ops/templates";
 import type { ActivityEventWithId, IssueWithId, UserProfile } from "@/src/types/firestore";
+import { dueDateFromDays, recurringIssueTemplateIds, RECURRING_ISSUE_TEMPLATES } from "../functions/src/recurring";
 
 const timestamp = (iso: string) => ({
   toDate: () => new Date(iso),
@@ -132,9 +134,48 @@ describe("templates and saved views", () => {
   test("builds saved issue view links with current-user substitution", () => {
     const myBlocked = SAVED_VIEWS.find((view) => view.id === "my-blocked");
     const unassigned = SAVED_VIEWS.find((view) => view.id === "unassigned-hq");
+    const myDueWeek = SAVED_VIEWS.find((view) => view.id === "my-due-week");
+    const staleBlocked = SAVED_VIEWS.find((view) => view.id === "blocked-72h");
 
     expect(savedViewHref(myBlocked!, "u1")).toBe("/issues?status=blocked&assignee=u1");
     expect(savedViewHref(unassigned!, null)).toBe("/issues?status=openish&location=hq&unassigned=1");
+    expect(savedViewHref(myDueWeek!, "u1")).toBe("/issues?status=openish&assignee=u1&due=week");
+    expect(savedViewHref(staleBlocked!, "u1")).toBe("/issues?status=blocked&stale=blocked_72h");
+  });
+});
+
+describe("attachments and recurring helpers", () => {
+  test("classifies attachments for links, files, and images", () => {
+    expect(attachmentKindFromName("photo.webp")).toBe("image");
+    expect(attachmentKindFromName("quote.pdf")).toBe("file");
+    expect(attachmentKindFromName("https://vendor.example/thread")).toBe("link");
+    expect(attachmentKindFromName("upload.bin", "image/png")).toBe("image");
+    expect(buildLinkAttachment("https://example.com/photo.jpg", "Install photo")).toEqual({
+      name: "Install photo",
+      url: "https://example.com/photo.jpg",
+      kind: "image",
+    });
+    expect(attachmentKindLabel("file")).toBe("File");
+    expect(formatAttachmentSize(1536)).toBe("2 KB");
+  });
+
+  test("computes recurring due dates at end of day", () => {
+    const due = dueDateFromDays(new Date(2026, 4, 20, 8), 7);
+    expect(due.getFullYear()).toBe(2026);
+    expect(due.getMonth()).toBe(4);
+    expect(due.getDate()).toBe(27);
+    expect(due.getHours()).toBe(17);
+  });
+
+  test("keeps recurring function templates aligned with app issue templates", () => {
+    const appTemplateIds = new Set(ISSUE_TEMPLATES.map((template) => template.id));
+    expect(recurringIssueTemplateIds.length).toBeGreaterThan(0);
+    for (const templateId of recurringIssueTemplateIds) {
+      const template = RECURRING_ISSUE_TEMPLATES[templateId];
+      expect(appTemplateIds.has(templateId)).toBe(true);
+      expect(template.due_days).toBeGreaterThan(0);
+      expect(template.checklist.length).toBeGreaterThan(0);
+    }
   });
 });
 

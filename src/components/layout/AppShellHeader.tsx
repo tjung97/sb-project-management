@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Soup } from "lucide-react";
+import { CalendarDays, Soup } from "lucide-react";
 import { MainNav } from "@/src/components/layout/MainNav";
 import { IssuesToolbarRoot } from "@/src/components/ops/IssuesToolbarRoot";
 import { RoleBadge } from "@/src/components/ops/RoleBadge";
@@ -14,6 +14,7 @@ import { useIssueHeader } from "@/src/components/issues/IssueHeaderContext";
 import { AppShellIssueContext } from "@/src/components/layout/AppShellIssueContext";
 import { useAppShellHeaderMetrics } from "@/src/hooks/useAppShellHeaderMetrics";
 import { useHeaderGlass } from "@/src/hooks/useHeaderGlass";
+import { useCalendarPanel } from "@/src/components/calendar/CalendarPanelContext";
 import { activeNavItem } from "@/src/lib/ops/app-navigation";
 import type { AuthUser } from "@/src/lib/firebase/auth-server";
 import { cn } from "@/src/lib/utils";
@@ -25,7 +26,8 @@ export function AppShellHeader({ user }: { user: AuthUser }) {
   const { setOpen: setCommandOpen } = useCommandPalette();
   const { state: issueHeader } = useIssueHeader();
   const headerRef = useRef<HTMLElement>(null);
-  useAppShellHeaderMetrics(headerRef, [glass, pathname]);
+  const { open: calendarOpen, toggle: toggleCalendar } = useCalendarPanel();
+  useAppShellHeaderMetrics(headerRef, `${glass}:${pathname}`);
 
   const isIssueDetail =
     pathname.startsWith("/issues/") && !pathname.startsWith("/issues/new");
@@ -74,6 +76,20 @@ export function AppShellHeader({ user }: { user: AuthUser }) {
               >
                 <span>Search</span>
                 <kbd className="rounded border border-border/80 bg-background/80 px-1 font-sans text-[10px]">⌘K</kbd>
+              </button>
+              <button
+                type="button"
+                onClick={toggleCalendar}
+                className={cn(
+                  "rounded-md p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
+                  calendarOpen
+                    ? "bg-primary/10 text-primary hover:bg-primary/15"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                )}
+                aria-label={calendarOpen ? "Hide calendar" : "Show calendar"}
+                title={calendarOpen ? "Hide calendar" : "Show calendar"}
+              >
+                <CalendarDays className="h-4 w-4" />
               </button>
               <ThemeToggle />
               <div

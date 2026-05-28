@@ -54,7 +54,7 @@ export default async function AdminPage({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         title="Admin"
         description="Locations, labels, users, automation, and system health. Deactivate instead of delete when records are still referenced."

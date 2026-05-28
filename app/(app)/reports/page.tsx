@@ -2,13 +2,27 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src
 import { IssueSummaryList } from "@/src/components/ops/IssueSummaryList";
 import { Button } from "@/src/components/ui/button";
 import { PageHeader } from "@/src/components/layout/PageHeader";
-import { listIssues, listLocations, listUserProfiles } from "@/src/lib/ops/data";
+import { SelectField } from "@/src/components/ui/select-field";
+import { WeeklyRecapCopy } from "@/src/components/ops/WeeklyRecapCopy";
+import { listIssues, listLocations, listProjects, listUserProfiles } from "@/src/lib/ops/data";
 import { formatDate } from "@/src/lib/ops/format";
 
 export const dynamic = "force-dynamic";
 
-export default async function ReportsPage() {
-  const [issues, locations, users] = await Promise.all([listIssues({ status: "all" }), listLocations(), listUserProfiles()]);
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const locationFilter = one(params.location);
+  const projectFilter = one(params.project);
+  const [allIssues, locations, projects, users] = await Promise.all([listIssues({ status: "all" }), listLocations(), listProjects(), listUserProfiles()]);
+  const issues = allIssues.filter((issue) => {
+    if (locationFilter && issue.location_id !== locationFilter) return false;
+    if (projectFilter && issue.project_id !== projectFilter) return false;
+    return true;
+  });
   const open = issues.filter((issue) => !["done", "closed"].includes(issue.status));
   const completed = issues.filter((issue) => ["done", "closed"].includes(issue.status));
   const weekStart = startOfWeek(new Date());
@@ -37,29 +51,66 @@ export default async function ReportsPage() {
     .map((location) => ({ location, count: blocked.filter((issue) => issue.location_id === location.id).length }))
     .sort((a, b) => b.count - a.count)[0];
   const oldestBlocked = blocked.sort((a, b) => a.updated_at.toMillis() - b.updated_at.toMillis())[0];
+  const exportQuery = new URLSearchParams();
+  exportQuery.set("status", "all");
+  if (locationFilter) exportQuery.set("location", locationFilter);
+  if (projectFilter) exportQuery.set("project", projectFilter);
+  const recap = [
+    "Seoul Bowl Ops weekly recap",
+    `Open: ${open.length}`,
+    `Blocked: ${blocked.length}`,
+    `Overdue: ${overdue.length}`,
+    `New this week: ${newThisWeek.length}`,
+    `Completed this week: ${completedThisWeek.length}`,
+    ownerLoad[0] ? `Highest workload: ${ownerLoad[0].user.display_name} (${ownerLoad[0].count})` : "Highest workload: None",
+    oldestBlocked ? `Oldest blocked: ${oldestBlocked.title}` : "Oldest blocked: None",
+  ].join("\n");
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader title="Reports" description="Exports and SLA-style bottleneck indicators.">
-        <a href="/api/exports/issues?status=all">
+        <WeeklyRecapCopy text={recap} />
+        <a href={`/api/exports/issues?${exportQuery.toString()}`}>
           <Button type="button" variant="outline" size="sm">
             Export all issues
           </Button>
         </a>
       </PageHeader>
-      <div className="grid gap-4 md:grid-cols-4">
+      <form className="grid gap-2 rounded-lg border border-border/80 bg-card p-4 shadow-card sm:grid-cols-[1fr_1fr_auto]" action="/reports">
+        <SelectField
+          name="location"
+          defaultValue={locationFilter ?? ""}
+          placeholder="All locations"
+          options={[{ value: "", label: "All locations" }, ...locations.map((location) => ({ value: location.id, label: location.name }))]}
+        />
+        <SelectField
+          name="project"
+          defaultValue={projectFilter ?? ""}
+          placeholder="All projects"
+          options={[{ value: "", label: "All projects" }, ...projects.map((project) => ({ value: project.id, label: project.title }))]}
+        />
+        <Button type="submit" variant="outline">Apply</Button>
+      </form>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Metric label="Open" value={open.length} />
         <Metric label="Blocked" value={blocked.length} />
         <Metric label="Overdue" value={overdue.length} />
         <Metric label="Completed" value={completed.length} />
-      </div>
-      <div className="grid gap-4 md:grid-cols-3">
         <Metric label="Due this week" value={dueSoon.length} />
         <Metric label="Blocked 72h+" value={staleBlocked.length} />
         <Metric label="Unassigned 48h+" value={unassigned48h.length} />
         <Metric label="Avg completion days" value={averageCompletionDays(completed)} />
       </div>
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle>Weekly recap</CardTitle>
+            <CardDescription>Small-team readout you can copy into chat or email.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <pre className="whitespace-pre-wrap rounded-lg bg-secondary p-3 text-xs leading-relaxed text-foreground">{recap}</pre>
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader>
             <CardTitle>Weekly movement</CardTitle>
@@ -93,7 +144,7 @@ export default async function ReportsPage() {
           </CardContent>
         </Card>
       </div>
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-3">
         <Card>
           <CardHeader>
             <CardTitle>Overdue work</CardTitle>
@@ -108,7 +159,7 @@ export default async function ReportsPage() {
           </CardHeader>
           <CardContent className="space-y-2">
             {ownerLoad.map((row) => (
-              <div key={row.user.uid} className="flex justify-between rounded-lg bg-secondary p-2 text-sm">
+              <div key={row.user.uid} className="flex items-center justify-between rounded-md bg-secondary/60 px-3 py-2 text-sm">
                 <span>{row.user.display_name}</span>
                 <strong>{row.count}</strong>
               </div>
@@ -122,7 +173,7 @@ export default async function ReportsPage() {
           </CardHeader>
           <CardContent className="space-y-2">
             {locationLoad.map((row) => (
-              <div key={row.location.id} className="flex justify-between rounded-lg bg-secondary p-2 text-sm">
+              <div key={row.location.id} className="flex items-center justify-between rounded-md bg-secondary/60 px-3 py-2 text-sm">
                 <span>{row.location.name}</span>
                 <strong>{row.count}</strong>
               </div>
@@ -139,7 +190,7 @@ export default async function ReportsPage() {
               <p className="text-sm text-muted-foreground">No stale blocked work.</p>
             ) : (
               staleBlocked.slice(0, 8).map((issue) => (
-                <div key={issue.id} className="rounded-lg bg-secondary p-2 text-sm">
+                <div key={issue.id} className="rounded-md bg-secondary/60 px-3 py-2 text-sm">
                   <p className="font-medium">{issue.title}</p>
                   <p className="text-xs text-muted-foreground">Last update {formatDate(issue.updated_at)}</p>
                 </div>
@@ -150,6 +201,10 @@ export default async function ReportsPage() {
       </div>
     </div>
   );
+}
+
+function one(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function averageCompletionDays(issues: Awaited<ReturnType<typeof listIssues>>) {
@@ -174,20 +229,18 @@ function startOfWeek(date: Date) {
 
 function Insight({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-secondary p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="font-medium">{value}</p>
+    <div className="rounded-md bg-secondary/60 px-3 py-2.5">
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <p className="mt-0.5 text-sm font-medium">{value}</p>
     </div>
   );
 }
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="text-3xl font-semibold">{value}</p>
-      </CardContent>
-    </Card>
+    <div className="rounded-lg border border-border/80 bg-card px-4 py-3 shadow-card">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-0.5 text-2xl font-semibold tabular-nums">{value}</p>
+    </div>
   );
 }

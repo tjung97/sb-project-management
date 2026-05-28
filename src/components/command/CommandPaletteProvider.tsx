@@ -11,7 +11,7 @@ type CommandPaletteContextValue = {
 
 const CommandPaletteContext = createContext<CommandPaletteContextValue | null>(null);
 
-export function CommandPaletteProvider({ role, children }: { role: string; children: React.ReactNode }) {
+export function CommandPaletteProvider({ role, userUid, children }: { role: string; userUid: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
 
   const toggle = useCallback(() => setOpen((value) => !value), []);
@@ -46,7 +46,7 @@ export function CommandPaletteProvider({ role, children }: { role: string; child
   return (
     <CommandPaletteContext.Provider value={{ open, setOpen, toggle }}>
       {children}
-      {open ? <CommandPalette onOpenChange={setOpen} role={role} /> : null}
+      {open ? <CommandPalette onOpenChange={setOpen} role={role} userUid={userUid} /> : null}
     </CommandPaletteContext.Provider>
   );
 }

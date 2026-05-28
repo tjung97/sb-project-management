@@ -18,7 +18,7 @@ type Row =
   | { type: "issue"; item: CommandPaletteSearchIssue }
   | { type: "project"; item: CommandPaletteSearchProject };
 
-export function CommandPalette({ onOpenChange, role }: { onOpenChange: (open: boolean) => void; role: string }) {
+export function CommandPalette({ onOpenChange, role, userUid }: { onOpenChange: (open: boolean) => void; role: string; userUid: string }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -28,7 +28,7 @@ export function CommandPalette({ onOpenChange, role }: { onOpenChange: (open: bo
   const [remoteProjects, setRemoteProjects] = useState<CommandPaletteSearchProject[]>([]);
   const [searching, setSearching] = useState(false);
 
-  const allCommands = useMemo(() => commandPaletteItems(role), [role]);
+  const allCommands = useMemo(() => commandPaletteItems(role, userUid), [role, userUid]);
   const commands = useMemo(() => filterCommandItems(allCommands, query, 10), [allCommands, query]);
   const remoteSearch = shouldSearchRemote(query);
 

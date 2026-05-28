@@ -15,7 +15,7 @@ export const markdownComponents: Components = {
   h6: ({ children }) => (
     <h6 className="mt-2 mb-1 text-sm font-semibold uppercase tracking-wide text-muted-foreground first:mt-0">{children}</h6>
   ),
-  p: ({ children }) => <p className="my-3 leading-7 text-foreground last:mb-0">{children}</p>,
+  p: ({ children }) => <p className="my-3 leading-7 text-foreground first:mt-0 last:mb-0">{children}</p>,
   strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
   em: ({ children }) => <em className="italic text-foreground">{children}</em>,
   del: ({ children }) => <del className="text-muted-foreground line-through">{children}</del>,

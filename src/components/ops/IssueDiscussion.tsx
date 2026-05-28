@@ -1,7 +1,8 @@
 "use client";
 
-import { UserCircle2, Send } from "lucide-react";
+import { Send, UserCircle2 } from "lucide-react";
 import { Button } from "@/src/components/ui/button";
+import { IssueAttachmentCard, IssueAttachmentFields } from "@/src/components/ops/IssueAttachmentFields";
 import { MarkdownComposer, MarkdownComposerFooter } from "@/src/components/ops/MarkdownComposer";
 import { MarkdownContent } from "@/src/components/ops/MarkdownContent";
 import type { MentionUser } from "@/src/lib/ops/mentions";
@@ -60,7 +61,7 @@ export function IssueDiscussion({
               <MarkdownComposerFooter>
                 <p className="text-xs text-muted-foreground">
                   {mentionUsers.length > 0
-                    ? `Type @ to tag — e.g. ${mentionUsers.slice(0, 3).map((user) => `@${user.handle}`).join(", ")}`
+                    ? `Type @ to tag - e.g. ${mentionUsers.slice(0, 3).map((user) => `@${user.handle}`).join(", ")}`
                     : "No teammates available to tag."}
                 </p>
                 <Button type="submit" size="sm">
@@ -70,13 +71,12 @@ export function IssueDiscussion({
               </MarkdownComposerFooter>
             }
           />
-          <details className="text-xs text-muted-foreground">
-            <summary className="cursor-pointer font-medium text-foreground/80">Add attachment (optional)</summary>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              <input name="attachment_name" className="form-select h-9" placeholder="Attachment name" />
-              <input name="attachment_url" className="form-select h-9" placeholder="Link or image URL" />
-            </div>
-          </details>
+          <IssueAttachmentFields
+            idPrefix="comment-attachment"
+            title="Attach evidence"
+            description="Photo, file, or vendor link"
+            compact
+          />
         </form>
       </div>
     </section>
@@ -103,24 +103,12 @@ function CommentCard({
           <span className="font-semibold text-foreground">{authorName}</span>{" "}
           <span className="text-muted-foreground">commented · {createdAt}</span>
         </header>
-        <div className="px-4 py-4 sm:px-5 sm:py-5">
+        <div className="px-4 py-3 sm:px-5">
           <MarkdownContent content={body} mentionUsers={mentionUsers} className="text-sm leading-relaxed" />
           {attachments.length > 0 ? (
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               {attachments.map((attachment) => (
-                <a
-                  key={attachment.url}
-                  href={attachment.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-lg border border-border p-2 text-sm hover:bg-accent/40"
-                >
-                  {attachment.kind === "image" ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={attachment.url} alt={attachment.name} className="mb-2 max-h-40 rounded-md object-cover" />
-                  ) : null}
-                  <span className="font-medium">{attachment.name}</span>
-                </a>
+                <IssueAttachmentCard key={attachment.url} attachment={attachment} />
               ))}
             </div>
           ) : null}

@@ -231,6 +231,7 @@ export interface RecurringTemplate {
   active: boolean;
   cadence: "weekly" | "monthly";
   next_run_at: Timestamp;
+  due_days?: number | null;
   default_location_id: string | null;
   created_at: Timestamp;
   updated_at: Timestamp;
@@ -336,5 +337,18 @@ export interface EmployeeDocument {
 }
 
 export interface EmployeeDocumentWithId extends EmployeeDocument {
+  id: string;
+}
+
+export interface CalendarEvent {
+  title: string;
+  date: Timestamp;
+  notes: string;
+  color: "blue" | "green" | "yellow" | "red" | "purple" | null;
+  created_by_uid: string;
+  created_at: Timestamp;
+}
+
+export interface CalendarEventWithId extends CalendarEvent {
   id: string;
 }

@@ -213,12 +213,20 @@
   .form-textarea {
     @apply w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm;
     @apply transition-[box-shadow,border-color,color] duration-200 ease-out;
-    @apply outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-ring/45 focus-visible:ring-offset-1 focus-visible:ring-offset-background;
+    @apply outline-none hover:border-foreground/20 focus:ring-0 focus-visible:border-ring/45 focus-visible:ring-2 focus-visible:ring-ring/45 focus-visible:ring-offset-1 focus-visible:ring-offset-background;
     @apply disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .form-select {
     @apply h-10;
+  }
+
+  /* Compact select for sidebar-style metadata rows */
+  .meta-select {
+    @apply w-full rounded-md border border-input/60 bg-transparent px-3 py-1 text-sm text-foreground;
+    @apply h-8 shadow-none outline-none;
+    @apply hover:border-foreground/20 focus:ring-0 focus-visible:border-ring/45 focus-visible:ring-2 focus-visible:ring-ring/45 focus-visible:ring-offset-1 focus-visible:ring-offset-background;
+    @apply disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .form-textarea {
@@ -498,7 +506,7 @@
 
   .issue-page-header-static {
     padding-top: 0.75rem;
-    padding-bottom: 0;
+    padding-bottom: 1.25rem;
   }
 
   .issue-page-header-static-inner {
@@ -1051,4 +1059,77 @@
       transition-delay: 0ms;
     }
   }
+}
+
+/* ── Calendar panel ───────────────────────────────────── */
+.calendar-panel {
+  width: 280px;
+  flex-shrink: 0;
+  position: sticky;
+  top: var(--app-header-height, 64px);
+  height: calc(100dvh - var(--app-header-height, 64px));
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-left: 1px solid hsl(var(--border) / 0.6);
+  background: hsl(var(--card));
+  transition: width 0.35s var(--liquid-ease, cubic-bezier(0.22, 1, 0.36, 1)),
+    opacity 0.25s ease;
+}
+
+.calendar-panel--closed {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Day events list fade+slide animation */
+@keyframes day-events-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.calendar-day-events {
+  animation: day-events-in 0.22s ease-out both;
+}
+
+/* Dot indicators under date numbers (react-day-picker modifiers) */
+.rdp-day.cal-has-issue,
+.rdp-day.cal-has-event {
+  position: relative;
+}
+
+.rdp-day.cal-has-issue::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: hsl(var(--muted-foreground) / 0.45);
+}
+
+.rdp-day.cal-has-event::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+}
+
+/* When a day has both, the event dot wins (rendered on top via specificity) */
+.rdp-day.cal-has-issue.cal-has-event::after {
+  background: hsl(var(--primary));
 }

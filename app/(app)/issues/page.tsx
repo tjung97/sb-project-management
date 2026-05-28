@@ -5,6 +5,7 @@ import { buttonVariants } from "@/src/components/ui/button";
 import { cn } from "@/src/lib/utils";
 import { CardListBody } from "@/src/components/ui/card";
 import { IssueListRow } from "@/src/components/ops/IssueListRow";
+import { IssuesAttentionStrip } from "@/src/components/ops/IssuesAttentionStrip";
 import { IssuesDensityToggle } from "@/src/components/ops/IssuesDensityToggle";
 import { IssuesEmptyState } from "@/src/components/ops/IssuesEmptyState";
 import { IssuesOverviewTree } from "@/src/components/ops/IssuesOverviewTree";
@@ -46,6 +47,19 @@ export default async function IssuesPage({
   const exportParams = filtersToSearchParams(filters);
   const now = new Date();
   const overview = user ? buildOpsOverviewTree(user, locations, projects, overviewIssues, now) : null;
+  const openAttentionIssues = overviewIssues.filter((issue) => !["done", "closed"].includes(issue.status));
+  const weekEnd = new Date(now);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  const attention = {
+    urgent: openAttentionIssues.filter((issue) => issue.priority === "urgent").length,
+    blocked: openAttentionIssues.filter((issue) => issue.status === "blocked").length,
+    overdue: openAttentionIssues.filter((issue) => issue.due_at && issue.due_at.toDate() < now).length,
+    unassigned: openAttentionIssues.filter((issue) => issue.assignee_uids.length === 0).length,
+    dueThisWeek: openAttentionIssues.filter((issue) => {
+      const due = issue.due_at?.toDate();
+      return Boolean(due && due <= weekEnd);
+    }).length,
+  };
 
   const filterLookups = {
     users: users.map((user) => ({ uid: user.uid, display_name: user.display_name })),
@@ -54,7 +68,7 @@ export default async function IssuesPage({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <IssuesQueueControls
         defaultQuery={filters.q ?? ""}
         resultCount={issues.length}
@@ -78,6 +92,8 @@ export default async function IssuesPage({
           New issue
         </Link>
       </PageHeader>
+
+      <IssuesAttentionStrip {...attention} />
 
       {overview ? (
         <section className="rounded-lg border border-border bg-card shadow-card">

@@ -9,6 +9,7 @@ import { IssueMetaChips } from "@/src/components/issues/IssueMetaChips";
 import { IssuePageHeader } from "@/src/components/issues/IssuePageHeader";
 import { IssueStatusPicker } from "@/src/components/issues/IssueStatusPicker";
 import { IssueReadMarker } from "@/src/components/issues/IssueReadMarker";
+import { IssueArchiveButton } from "@/src/components/issues/IssueArchiveButton";
 import { ActivityTimeline } from "@/src/components/ops/ActivityTimeline";
 import { IssueDescriptionPanel } from "@/src/components/ops/IssueDescriptionPanel";
 import { UrgentBanner } from "@/src/components/ops/UrgentBanner";
@@ -118,13 +119,16 @@ export default async function IssuePage({ params }: { params: Promise<{ issueId:
         }}
       >
         <div className="issue-page-header-static-inner">
-          <Link
-            href="/issues"
-            className="inline-flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4 shrink-0" />
-            Back to issues
-          </Link>
+          <div className="flex items-center justify-between gap-3">
+            <Link
+              href="/issues"
+              className="inline-flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4 shrink-0" />
+              Back to issues
+            </Link>
+            <IssueArchiveButton issueId={issue.id} isArchived={Boolean(issue.archived_at)} />
+          </div>
 
           <div className="issue-page-header-static-main">
             <h1 className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-2xl font-semibold tracking-tight text-balance sm:text-3xl">

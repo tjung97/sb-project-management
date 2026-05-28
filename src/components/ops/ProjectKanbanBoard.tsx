@@ -122,94 +122,126 @@ export function ProjectKanbanBoard({
         />
       </div>
       <div className={cn("grid gap-4 xl:grid-cols-5", pending && "opacity-80")}>
-      {filteredColumns.map((column) => (
-        <section
-          key={column.status}
-          className="rounded-lg border border-border bg-card p-3 shadow-card"
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={onDrop(column.status)}
-        >
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">{column.title}</h2>
-            <span className="rounded-md bg-secondary px-2 py-0.5 text-xs">{column.issues.length}</span>
-          </div>
-          <div className="space-y-3 min-h-[120px]">
-            {column.issues.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">Drop issues here</p>
-            ) : (
-              column.issues.map((issue) => (
-                <div
-                  key={issue.id}
-                  draggable
-                  onDragStart={onDragStart(issue.id)}
-                  className={cn(
-                    "cursor-grab rounded-md border border-border border-l-4 bg-background p-3 active:cursor-grabbing",
-                    isUrgentPriority(issue.priority)
-                      ? priorityBorderClass("urgent")
-                      : locationBorderClass(issue.location_kind ?? undefined),
-                    priorityRowClass(issue.priority)
-                  )}
-                >
-                  <div className="mb-2 flex flex-wrap gap-2">
-                    {isUrgentPriority(issue.priority) ? <PriorityBadge priority={issue.priority} prominent /> : null}
-                    <StatusBadge status={column.status} showPulse />
-                    {!isUrgentPriority(issue.priority) ? <PriorityBadge priority={issue.priority} /> : null}
-                    {issue.location_kind && issue.location_name ? (
-                      <LocationKindBadge kind={issue.location_kind} name={issue.location_name} />
-                    ) : null}
-                  </div>
-                  <Link
-                    href={`/issues/${issue.id}`}
-                    className={cn("text-sm font-medium hover:underline", isUrgentPriority(issue.priority) && "font-semibold text-destructive")}
-                    onClick={(e) => e.stopPropagation()}
+        {filteredColumns.map((column) => (
+          <section
+            key={column.status}
+            className="rounded-lg border border-border bg-card p-3 shadow-card"
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={onDrop(column.status)}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold">{column.title}</h2>
+              <span className="rounded-md bg-secondary px-2 py-0.5 text-xs">{column.issues.length}</span>
+            </div>
+            <div className="min-h-[120px] space-y-3">
+              {column.issues.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">Drop issues here</p>
+              ) : (
+                column.issues.map((issue) => (
+                  <div
+                    key={issue.id}
+                    draggable
+                    onDragStart={onDragStart(issue.id)}
+                    className={cn(
+                      "group cursor-grab rounded-md border border-border border-l-4 bg-background p-3 active:cursor-grabbing",
+                      isUrgentPriority(issue.priority)
+                        ? priorityBorderClass("urgent")
+                        : locationBorderClass(issue.location_kind ?? undefined),
+                      priorityRowClass(issue.priority)
+                    )}
                   >
-                    {issue.title}{" "}
-                    <span className="font-normal text-muted-foreground">
-                      {formatIssueNumber({ id: issue.id, issue_number: issue.issue_number })}
-                    </span>
-                  </Link>
-                  <div className="mt-2">
-                    <AvatarStack uids={issue.assignee_uids} usersById={userById} max={3} />
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      {isUrgentPriority(issue.priority) ? <PriorityBadge priority={issue.priority} prominent /> : null}
+                      <StatusBadge status={column.status} showPulse />
+                      {!isUrgentPriority(issue.priority) ? <PriorityBadge priority={issue.priority} /> : null}
+                      {issue.location_kind && issue.location_name ? (
+                        <LocationKindBadge kind={issue.location_kind} name={issue.location_name} />
+                      ) : null}
+                    </div>
+                    <Link
+                      href={`/issues/${issue.id}`}
+                      className={cn("text-sm font-medium hover:underline", isUrgentPriority(issue.priority) && "font-semibold text-destructive")}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {issue.title}{" "}
+                      <span className="font-normal text-muted-foreground">
+                        {formatIssueNumber({ id: issue.id, issue_number: issue.issue_number })}
+                      </span>
+                    </Link>
+                    <div className="mt-2">
+                      <AvatarStack uids={issue.assignee_uids} usersById={userById} max={3} />
+                    </div>
+                    {issue.checklist_total > 0 ? (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Checklist {issue.checklist_done}/{issue.checklist_total}
+                      </p>
+                    ) : null}
+                    <p className="mt-2 text-xs text-muted-foreground">Due {issue.due_at ? formatDate(issue.due_at) : "No date"}</p>
+                    <StatusMoveSelect
+                      issue={issue}
+                      currentStatus={column.status}
+                      columns={columns}
+                      disabled={pending}
+                      onMove={(targetStatus) => {
+                        startTransition(() => moveIssueOnBoard(issue.id, targetStatus));
+                        setColumns((current) =>
+                          current.map((source) => ({
+                            ...source,
+                            issues:
+                              source.status === column.status
+                                ? source.issues.filter((item) => item.id !== issue.id)
+                                : source.status === targetStatus
+                                  ? [...source.issues, { ...issue, status: targetStatus }]
+                                  : source.issues,
+                          }))
+                        );
+                      }}
+                    />
                   </div>
-                  {issue.checklist_total > 0 ? (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Checklist {issue.checklist_done}/{issue.checklist_total}
-                    </p>
-                  ) : null}
-                  <p className="mt-2 text-xs text-muted-foreground">Due {issue.due_at ? formatDate(issue.due_at) : "No date"}</p>
-                  <div className="mt-3 grid grid-cols-2 gap-1">
-                    {columns.map((target) => (
-                      <button
-                        key={target.status}
-                        type="button"
-                        disabled={target.status === column.status || pending}
-                        onClick={() => {
-                          startTransition(() => moveIssueOnBoard(issue.id, target.status));
-                          setColumns((current) =>
-                            current.map((source) => ({
-                              ...source,
-                              issues:
-                                source.status === column.status
-                                  ? source.issues.filter((item) => item.id !== issue.id)
-                                  : source.status === target.status
-                                    ? [...source.issues, { ...issue, status: target.status }]
-                                    : source.issues,
-                            }))
-                          );
-                        }}
-                        className="rounded border border-border px-1 py-1 text-[10px] text-muted-foreground disabled:opacity-40"
-                      >
-                        {target.title}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
-      ))}
+                ))
+              )}
+            </div>
+          </section>
+        ))}
       </div>
+    </div>
+  );
+}
+
+function StatusMoveSelect({
+  issue,
+  currentStatus,
+  columns,
+  disabled,
+  onMove,
+}: {
+  issue: KanbanIssue;
+  currentStatus: IssueStatus;
+  columns: Column[];
+  disabled: boolean;
+  onMove: (status: IssueStatus) => void;
+}) {
+  return (
+    <div className="mt-3 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+      <Select
+        value={currentStatus}
+        onValueChange={(value) => {
+          const status = value as IssueStatus;
+          if (status !== currentStatus) onMove(status);
+        }}
+        disabled={disabled}
+      >
+        <SelectTrigger className="h-8 text-xs" aria-label={`Move ${issue.title}`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {columns.map((target) => (
+            <SelectItem key={target.status} value={target.status}>
+              Move to {target.title}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

@@ -6,10 +6,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/src/lib/firebase/auth-server";
 import { adminDb, adminStorage } from "@/src/lib/firebase/admin";
-import { requireAdminRole, requireIssueWrite } from "@/src/lib/ops/authz";
+import { requireAdminRole, requireIssueRead, requireIssueWrite } from "@/src/lib/ops/authz";
 import { formatIssueNumber, markdownPreview } from "@/src/lib/ops/format";
 import { getIssueTemplate } from "@/src/lib/ops/templates";
 import { getProjectTemplate } from "@/src/lib/ops/project-templates";
+import { attachmentKindFromName, buildLinkAttachment } from "@/src/lib/ops/attachments";
 import { activityTypeForPeopleChanges, buildUserDisplayMap, diffPeople, summarizePeopleChanges } from "@/src/lib/ops/people-diff";
 import { buildMentionUsers, resolveMentionUids } from "@/src/lib/ops/mentions";
 import { syncUserAuthClaims } from "@/src/lib/ops/sync-user-claims";
@@ -191,7 +192,7 @@ async function uploadCommentFile(issueId: string, file: File | null) {
   return {
     name: file.name,
     url: `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`,
-    kind: file.type.startsWith("image/") ? ("image" as const) : ("file" as const),
+    kind: attachmentKindFromName(file.name, file.type),
   };
 }
 
@@ -291,6 +292,8 @@ export async function createIssue(formData: FormData) {
   const title = requiredString(formData, "title");
   const description = requiredString(formData, "description");
   const initialAttachmentUrl = optionalString(formData, "attachment_url");
+  const initialAttachmentName = optionalString(formData, "attachment_name");
+  const initialAttachmentFile = formData.get("attachment_file") instanceof File ? (formData.get("attachment_file") as File) : null;
   const projectId = optionalString(formData, "project_id");
   const parentIssueId = optionalString(formData, "parent_issue_id");
   const locationId = optionalString(formData, "location_id");
@@ -344,16 +347,14 @@ export async function createIssue(formData: FormData) {
   const issue = { id: issueRef.id, issue_number: issueNumber, title, project_id: projectId } as IssueWithId;
   await writeActivity(issueRef.id, "created", `${actorInfo.name} created this issue`, actorInfo);
 
-  if (initialAttachmentUrl) {
+  const uploadedInitialAttachment = await uploadCommentFile(issueRef.id, initialAttachmentFile);
+  const initialLinkAttachment = initialAttachmentUrl ? buildLinkAttachment(initialAttachmentUrl, initialAttachmentName) : null;
+  const initialAttachments = [uploadedInitialAttachment, initialLinkAttachment].filter(Boolean);
+
+  if (initialAttachments.length > 0) {
     await issueRef.collection("comments").add({
       body: "Initial photo or file link attached during issue creation.",
-      attachments: [
-        {
-          name: initialAttachmentUrl,
-          url: initialAttachmentUrl,
-          kind: /\.(png|jpe?g|gif|webp)(\?|$)/i.test(initialAttachmentUrl) ? "image" : "link",
-        },
-      ],
+      attachments: initialAttachments,
       author_uid: actorInfo.uid,
       author_name: actorInfo.name,
       created_at: FieldValue.serverTimestamp(),
@@ -498,6 +499,80 @@ export async function updateIssueAssignees(issueId: string, formData: FormData) 
   revalidatePath("/inbox");
 }
 
+export async function assignIssueToMe(issueId: string) {
+  const user = await currentUserOrThrow();
+  const actorInfo = {
+    uid: user.uid,
+    name: user.name ?? user.email ?? "Team member",
+    role: user.role,
+    storeIds: user.storeIds,
+  };
+  const issueRef = adminDb.collection("issues").doc(issueId);
+  const issue = await issueRef.get();
+  if (!issue.exists) throw new Error("Issue not found.");
+  const before = { id: issue.id, ...issue.data() } as IssueWithId;
+  requireIssueRead(user, before);
+
+  if ((before.assignee_uids ?? []).includes(user.uid)) return;
+
+  const profiles = await listProfilesForDiff();
+  const userMap = buildUserDisplayMap(profiles);
+  const assigneeUids = Array.from(new Set([...(before.assignee_uids ?? []), user.uid]));
+  const changes = diffPeople("assignee_uids", before.assignee_uids ?? [], assigneeUids, userMap);
+  const summary = `${actorInfo.name} assigned themselves`;
+
+  await issueRef.update({
+    assignee_uids: assigneeUids,
+    updated_at: FieldValue.serverTimestamp(),
+    updated_by_uid: actorInfo.uid,
+    last_activity_summary: summary,
+    activity_count: FieldValue.increment(1),
+  });
+  const activityId = await writePeopleActivity(issueId, changes, actorInfo);
+  await notifyPeopleChanges({ issue: before, actorInfo, changes, activityId });
+
+  revalidatePath(`/issues/${issueId}`);
+  revalidatePath("/issues");
+  revalidatePath("/inbox");
+}
+
+export async function setIssueWatching(issueId: string, watching: boolean) {
+  const user = await currentUserOrThrow();
+  const actorInfo = {
+    uid: user.uid,
+    name: user.name ?? user.email ?? "Team member",
+    role: user.role,
+    storeIds: user.storeIds,
+  };
+  const issueRef = adminDb.collection("issues").doc(issueId);
+  const issue = await issueRef.get();
+  if (!issue.exists) throw new Error("Issue not found.");
+  const before = { id: issue.id, ...issue.data() } as IssueWithId;
+  requireIssueRead(user, before);
+
+  const previousWatchers = before.watcher_uids ?? [];
+  const watcherUids = watching
+    ? Array.from(new Set([...previousWatchers, user.uid]))
+    : previousWatchers.filter((uid) => uid !== user.uid);
+  const changes = diffPeople("watcher_uids", previousWatchers, watcherUids, buildUserDisplayMap(await listProfilesForDiff()));
+  if (changes.length === 0) return;
+
+  const summary = summarizePeopleChanges(actorInfo.name, changes);
+  await issueRef.update({
+    watcher_uids: watcherUids,
+    updated_at: FieldValue.serverTimestamp(),
+    updated_by_uid: actorInfo.uid,
+    last_activity_summary: summary,
+    activity_count: FieldValue.increment(1),
+  });
+  const activityId = await writePeopleActivity(issueId, changes, actorInfo);
+  await notifyPeopleChanges({ issue: before, actorInfo, changes, activityId });
+
+  revalidatePath(`/issues/${issueId}`);
+  revalidatePath("/issues");
+  revalidatePath("/inbox");
+}
+
 export async function addIssueComment(issueId: string, formData: FormData) {
   const actorInfo = await actor();
   const body = requiredString(formData, "body");
@@ -511,13 +586,7 @@ export async function addIssueComment(issueId: string, formData: FormData) {
   requireIssueWrite({ uid: actorInfo.uid, role: actorInfo.role, storeIds: actorInfo.storeIds, email: null, name: actorInfo.name }, issueData);
 
   const uploadedAttachment = await uploadCommentFile(issueId, attachmentFile);
-  const linkAttachment = attachmentUrl
-    ? {
-        name: attachmentName ?? attachmentUrl,
-        url: attachmentUrl,
-        kind: /\.(png|jpe?g|gif|webp)(\?|$)/i.test(attachmentUrl) ? ("image" as const) : ("link" as const),
-      }
-    : null;
+  const linkAttachment = attachmentUrl ? buildLinkAttachment(attachmentUrl, attachmentName) : null;
 
   await issueRef.collection("comments").add({
     body,
@@ -686,6 +755,8 @@ export async function createProject(formData: FormData) {
     status: "active",
     owner_uid: optionalString(formData, "owner_uid"),
     location_ids: values(formData, "location_ids"),
+    blocked_reason: optionalString(formData, "blocked_reason"),
+    next_step: optionalString(formData, "next_step"),
     issue_count: 0,
     open_issue_count: 0,
     done_issue_count: 0,
@@ -723,6 +794,8 @@ export async function createProjectFromTemplate(formData: FormData) {
     status: "active",
     owner_uid: ownerUid,
     location_ids: locationIds,
+    blocked_reason: null,
+    next_step: `Start ${template.name} playbook`,
     issue_count: template.issues.length,
     open_issue_count: template.issues.length,
     done_issue_count: 0,
@@ -870,6 +943,8 @@ export async function updateProject(projectId: string, formData: FormData) {
     status: requiredString(formData, "status"),
     owner_uid: optionalString(formData, "owner_uid"),
     location_ids: values(formData, "location_ids"),
+    blocked_reason: optionalString(formData, "blocked_reason"),
+    next_step: optionalString(formData, "next_step"),
     due_at: due,
     updated_at: FieldValue.serverTimestamp(),
   });
@@ -958,6 +1033,20 @@ export async function markNotificationRead(notificationId: string) {
 export async function markAllNotificationsRead() {
   const user = await currentUserOrThrow();
   const snapshot = await adminDb.collection("notificationInbox").where("uid", "==", user.uid).where("read", "==", false).get();
+  const batch = adminDb.batch();
+  snapshot.docs.forEach((doc) => batch.update(doc.ref, { read: true, read_at: FieldValue.serverTimestamp() }));
+  await batch.commit();
+  revalidatePath("/inbox");
+}
+
+export async function markIssueNotificationsRead(issueId: string) {
+  const user = await currentUserOrThrow();
+  const snapshot = await adminDb
+    .collection("notificationInbox")
+    .where("uid", "==", user.uid)
+    .where("issue_id", "==", issueId)
+    .where("read", "==", false)
+    .get();
   const batch = adminDb.batch();
   snapshot.docs.forEach((doc) => batch.update(doc.ref, { read: true, read_at: FieldValue.serverTimestamp() }));
   await batch.commit();
@@ -1054,6 +1143,7 @@ export async function upsertRecurringTemplate(formData: FormData) {
       active: formData.get("active") === "on",
       cadence,
       next_run_at: Timestamp.fromDate(new Date(`${nextRunRaw}T08:00:00`)),
+      due_days: Number(formData.get("due_days") ?? 7),
       default_location_id: optionalString(formData, "default_location_id"),
       created_by_uid: existing.exists ? existing.get("created_by_uid") : user.uid,
       created_at: existing.exists ? existing.get("created_at") : FieldValue.serverTimestamp(),
@@ -1151,14 +1241,17 @@ export async function recalculateProject(projectId: string | null) {
   let open = 0;
   let done = 0;
   let blocked = 0;
+  let total = 0;
   for (const doc of snapshot.docs) {
+    if (doc.get("archived_at")) continue;
+    total += 1;
     const status = doc.get("status") as IssueStatus;
     if (status === "done" || status === "closed") done += 1;
     else open += 1;
     if (status === "blocked") blocked += 1;
   }
   await adminDb.collection("projects").doc(projectId).update({
-    issue_count: snapshot.size,
+    issue_count: total,
     open_issue_count: open,
     done_issue_count: done,
     blocked_issue_count: blocked,

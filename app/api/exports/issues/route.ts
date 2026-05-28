@@ -15,6 +15,7 @@ export async function GET(request: Request) {
     project: url.searchParams.get("project") ?? undefined,
     priority: (url.searchParams.get("priority") as IssueFilters["priority"]) ?? undefined,
     due: (url.searchParams.get("due") as IssueFilters["due"]) ?? undefined,
+    stale: (url.searchParams.get("stale") as IssueFilters["stale"]) ?? undefined,
     q: url.searchParams.get("q") ?? undefined,
   };
   const [issues, users, locations, projects] = await Promise.all([

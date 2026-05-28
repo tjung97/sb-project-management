@@ -2,8 +2,8 @@
 
 import { useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Search, X } from "lucide-react";
-import { parseIssueFilters, filtersToSearchParams } from "@/src/lib/ops/issue-filters";
+import { RotateCcw, Search, X } from "lucide-react";
+import { parseIssueFilters, filtersToSearchParams, hasActiveFilters } from "@/src/lib/ops/issue-filters";
 import { Input } from "@/src/components/ui/input";
 import { cn } from "@/src/lib/utils";
 
@@ -22,10 +22,19 @@ export function IssuesSearchBar({
   const [pending, startTransition] = useTransition();
   const filters = parseIssueFilters(Object.fromEntries(searchParams.entries()));
   const hasQuery = Boolean(defaultQuery.trim());
+  const active = hasActiveFilters(filters);
 
   function applySearch(query: string) {
     const next = { ...filters, q: query.trim() || undefined };
     const params = filtersToSearchParams(next, { density: searchParams.get("density") ?? undefined });
+    startTransition(() => {
+      router.push(params.toString() ? `${pathname}?${params.toString()}` : pathname);
+    });
+  }
+
+  function clearAll() {
+    const density = searchParams.get("density") ?? undefined;
+    const params = filtersToSearchParams(parseIssueFilters({}), { density });
     startTransition(() => {
       router.push(params.toString() ? `${pathname}?${params.toString()}` : pathname);
     });
@@ -76,6 +85,19 @@ export function IssuesSearchBar({
         <span className="font-semibold text-foreground">{resultCount}</span>
         <span className="ml-1">{hasQuery ? `match${resultCount === 1 ? "" : "es"}` : "in queue"}</span>
       </span>
+      {active ? (
+        <button
+          type="button"
+          onClick={clearAll}
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1 rounded-md border border-border/80 bg-background text-muted-foreground transition hover:bg-accent/50 hover:text-foreground",
+            compact ? "h-8 px-2 text-[11px]" : "h-9 px-2.5 text-xs"
+          )}
+        >
+          <RotateCcw className="h-3 w-3" aria-hidden />
+          Clear
+        </button>
+      ) : null}
     </form>
   );
 }

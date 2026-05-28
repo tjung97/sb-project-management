@@ -7,6 +7,7 @@ import { profileStoreIds, storeIdsFromTokenClaims } from "@/src/lib/ops/user-sto
 import { canReadIssue, requireIssueRead } from "@/src/lib/ops/authz";
 import type {
   ActivityEventWithId,
+  CalendarEventWithId,
   ChecklistItemWithId,
   IssueCommentWithId,
   IssueWithId,
@@ -17,6 +18,7 @@ import type {
   IssuePriority,
   IssueStatus,
   NotificationInboxItem,
+  NotificationPreference,
   RecurringTemplateWithId,
 } from "@/src/types/firestore";
 
@@ -31,6 +33,7 @@ export interface IssueFilters {
   kind?: string;
   label?: string;
   due?: "overdue" | "today" | "week" | "none";
+  stale?: "blocked_72h" | "unassigned_48h";
   q?: string;
 }
 
@@ -308,6 +311,21 @@ export async function listGroupedNotifications(limit = 60) {
   }));
 }
 
+export async function listNotificationPreferences(uid: string): Promise<NotificationPreference> {
+  const doc = await adminDb.collection("notificationPreferences").doc(uid).get();
+  if (doc.exists) return doc.data() as NotificationPreference;
+  const profile = await adminDb.collection("userProfiles").doc(uid).get();
+  return {
+    uid,
+    default_view: "inbox",
+    density: "comfortable",
+    digest_mode: true,
+    notification_email: profile.exists ? profile.get("notification_email") !== false : true,
+    notification_slack: profile.exists ? profile.get("notification_slack") === true : false,
+    updated_at: Timestamp.now() as unknown as NotificationPreference["updated_at"],
+  };
+}
+
 export async function listRecurringTemplates(): Promise<RecurringTemplateWithId[]> {
   const user = await getCurrentUser();
   if (!user || user.role !== "admin") return [];
@@ -393,6 +411,63 @@ function applyIssueFilters(issues: IssueWithId[], filters: IssueFilters) {
       if (filters.due === "today" && (!due || due >= todayEnd || due < new Date(now.getFullYear(), now.getMonth(), now.getDate()))) return false;
       if (filters.due === "week" && (!due || due > weekEnd || ["done", "closed"].includes(issue.status))) return false;
     }
+    if (filters.stale) {
+      const ageMs = now.getTime() - issue.updated_at.toMillis();
+      if (filters.stale === "blocked_72h" && (issue.status !== "blocked" || ageMs < 72 * 60 * 60 * 1000)) return false;
+      if (filters.stale === "unassigned_48h" && (issue.assignee_uids.length > 0 || ageMs < 48 * 60 * 60 * 1000 || ["done", "closed"].includes(issue.status))) return false;
+    }
     return true;
   });
+}
+
+export interface IssueDueSummary {
+  id: string;
+  title: string;
+  due_at: Timestamp;
+  status: IssueStatus;
+  priority: IssuePriority;
+}
+
+export async function listIssuesWithDue(): Promise<IssueDueSummary[]> {
+  // Avoid composite index: skip orderBy and sort in JS; filter status in JS
+  const snapshot = await adminDb
+    .collection("issues")
+    .where("due_at", "!=", null)
+    .limit(500)
+    .get();
+  return snapshot.docs
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        title: String(data.title ?? ""),
+        due_at: data.due_at as Timestamp,
+        status: (data.status as IssueStatus) ?? "open",
+        priority: (data.priority as IssuePriority) ?? "normal",
+      };
+    })
+    .filter((issue) => !["done", "closed"].includes(issue.status))
+    .sort((a, b) => a.due_at.toMillis() - b.due_at.toMillis());
+}
+
+export async function listCalendarEvents(uid: string): Promise<CalendarEventWithId[]> {
+  // Skip orderBy to avoid requiring a composite index; sort in JS instead
+  const snapshot = await adminDb
+    .collection("calendar_events")
+    .where("created_by_uid", "==", uid)
+    .get();
+  return snapshot.docs
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        title: String(data.title ?? ""),
+        date: data.date as CalendarEventWithId["date"],
+        notes: String(data.notes ?? ""),
+        color: (data.color as CalendarEventWithId["color"]) ?? null,
+        created_by_uid: String(data.created_by_uid ?? ""),
+        created_at: data.created_at as CalendarEventWithId["created_at"],
+      };
+    })
+    .sort((a, b) => a.date.toMillis() - b.date.toMillis());
 }

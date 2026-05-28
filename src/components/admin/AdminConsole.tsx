@@ -537,6 +537,15 @@ export function AdminConsole({
                     defaultValue={editRecurring?.next_run_at ? dateInput(editRecurring.next_run_at) : ""}
                   />
                 </FormField>
+                <FormField label="Due in days" htmlFor="recurring-due-days">
+                  <Input
+                    id="recurring-due-days"
+                    name="due_days"
+                    type="number"
+                    min="1"
+                    defaultValue={String(editRecurring?.due_days ?? 7)}
+                  />
+                </FormField>
               </FormRow>
               <label className="flex items-center gap-2 text-sm">
                 <input name="active" type="checkbox" defaultChecked={editRecurring?.active !== false} /> Active

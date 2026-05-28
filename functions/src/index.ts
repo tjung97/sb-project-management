@@ -4,6 +4,7 @@ import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
+import { dueDateFromDays, RECURRING_ISSUE_TEMPLATES } from "./recurring.js";
 
 initializeApp();
 
@@ -27,26 +28,8 @@ interface RecurringTemplate {
   cadence: "weekly" | "monthly";
   next_run_at: FirebaseFirestore.Timestamp;
   default_location_id?: string | null;
+  due_days?: number | null;
 }
-
-const issueTemplates: Record<string, { title: string; description: string; kind: string; priority: string; label_ids: string[]; checklist: string[] }> = {
-  "weekly-inventory": {
-    title: "Weekly inventory review",
-    description: "Review par levels, shortages, and store requests from the past week.",
-    kind: "warehouse",
-    priority: "normal",
-    label_ids: ["follow-up"],
-    checklist: ["Review shortage report", "Update par levels", "Reply to open store requests"],
-  },
-  "vendor-outage": {
-    title: "Vendor outage follow-up",
-    description: "Track vendor delays, substitutes, store impact, and resolution ETA.",
-    kind: "follow_up",
-    priority: "urgent",
-    label_ids: ["vendor", "urgent"],
-    checklist: ["Contact vendor for ETA", "Notify affected stores", "Confirm substitute supply", "Close loop when resolved"],
-  },
-};
 
 export const processNotificationEvent = onDocumentCreated(
   {
@@ -124,13 +107,14 @@ export const generateRecurringIssues = onSchedule(
 
     for (const doc of snapshot.docs) {
       const recurring = doc.data() as RecurringTemplate;
-      const template = issueTemplates[recurring.template_id];
+      const template = RECURRING_ISSUE_TEMPLATES[recurring.template_id];
       if (!template) {
         logger.warn("Recurring template references unknown issue template", { id: doc.id, templateId: recurring.template_id });
         continue;
       }
 
       const issueNumber = await allocateIssueNumber();
+      const dueAt = dueDateFromDays(now, recurring.due_days ?? template.due_days);
       const issueRef = await db.collection("issues").add({
         issue_number: issueNumber,
         title: `${template.title} (${new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(now)})`,
@@ -144,7 +128,7 @@ export const generateRecurringIssues = onSchedule(
         assignee_uids: [],
         watcher_uids: [],
         label_ids: template.label_ids,
-        due_at: FieldValue.serverTimestamp(),
+        due_at: dueAt,
         created_at: FieldValue.serverTimestamp(),
         updated_at: FieldValue.serverTimestamp(),
         closed_at: null,

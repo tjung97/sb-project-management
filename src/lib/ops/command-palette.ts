@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Plus } from "lucide-react";
+import { Ban, CalendarClock, FolderPlus, Plus, UserX } from "lucide-react";
 import { navItemsForRole } from "@/src/lib/ops/app-navigation";
 
 export type CommandPaletteItem = {
@@ -25,7 +25,7 @@ export type CommandPaletteSearchProject = {
   title: string;
 };
 
-const ACTION_COMMANDS: Omit<CommandPaletteItem, "icon">[] = [
+const ACTION_COMMANDS: CommandPaletteItem[] = [
   {
     id: "action-new-issue",
     kind: "action",
@@ -33,10 +33,47 @@ const ACTION_COMMANDS: Omit<CommandPaletteItem, "icon">[] = [
     description: "Create a new issue",
     href: "/issues/new",
     keywords: ["open issue", "create issue", "add issue", "new", "compose"],
+    icon: Plus,
+  },
+  {
+    id: "action-new-project",
+    kind: "action",
+    label: "New project",
+    description: "Create a new project",
+    href: "/projects",
+    keywords: ["create project", "add project", "new project", "initiative", "playbook"],
+    icon: FolderPlus,
+  },
+  {
+    id: "view-my-blocked",
+    kind: "navigate",
+    label: "My blocked",
+    description: "Blocked issues assigned to you",
+    href: "/issues?status=blocked&assignee=__me__",
+    keywords: ["my blocked", "blocked assigned", "stuck"],
+    icon: Ban,
+  },
+  {
+    id: "view-due-week",
+    kind: "navigate",
+    label: "Due this week",
+    description: "Open work due within seven days",
+    href: "/issues?due=week",
+    keywords: ["due this week", "upcoming", "deadline"],
+    icon: CalendarClock,
+  },
+  {
+    id: "view-needs-owner",
+    kind: "navigate",
+    label: "Needs owner",
+    description: "Open work without an assignee",
+    href: "/issues?unassigned=1",
+    keywords: ["unassigned", "needs owner", "no owner"],
+    icon: UserX,
   },
 ];
 
-export function commandPaletteItems(role: string): CommandPaletteItem[] {
+export function commandPaletteItems(role: string, userUid: string): CommandPaletteItem[] {
   const { groups, more } = navItemsForRole(role);
   const nav: CommandPaletteItem[] = [...groups.flatMap((g) => g.items), ...more].map((item) => ({
     id: `nav-${item.href}`,
@@ -51,7 +88,7 @@ export function commandPaletteItems(role: string): CommandPaletteItem[] {
 
   const actions: CommandPaletteItem[] = ACTION_COMMANDS.map((item) => ({
     ...item,
-    icon: Plus,
+    href: item.href.replace("__me__", userUid),
   }));
 
   return [...actions, ...nav];

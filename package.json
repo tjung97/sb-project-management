@@ -19,6 +19,7 @@
     "emulators": "npx firebase-tools emulators:start --only auth,firestore,functions"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-select": "^2.2.6",
     "class-variance-authority": "^0.7.1",
@@ -29,6 +30,7 @@
     "luxon": "^3.7.2",
     "next": "16.2.6",
     "react": "19.2.4",
+    "react-day-picker": "^8.10.2",
     "react-dom": "19.2.4",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",

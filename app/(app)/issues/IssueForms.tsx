@@ -1,6 +1,7 @@
+import type { ReactNode } from "react";
 import { Button } from "@/src/components/ui/button";
 import { Input } from "@/src/components/ui/input";
-import { SelectField } from "@/src/components/ui/select-field";
+import { IssueAttachmentFields } from "@/src/components/ops/IssueAttachmentFields";
 import { IssueTemplatePicker } from "@/src/components/ops/IssueTemplatePicker";
 import { MarkdownComposer } from "@/src/components/ops/MarkdownComposer";
 import { SidebarListPicker } from "@/src/components/ops/SidebarListPicker";
@@ -26,6 +27,7 @@ export function CreateIssueForm({
   users,
   template,
   parentIssueId,
+  defaultProjectId,
   mobile = false,
 }: {
   projects: ProjectWithId[];
@@ -34,6 +36,7 @@ export function CreateIssueForm({
   users: UserProfile[];
   template?: IssueTemplateDefinition | null;
   parentIssueId?: string | null;
+  defaultProjectId?: string | null;
   mobile?: boolean;
 }) {
   const defaultTitle = template?.title ?? "";
@@ -52,119 +55,157 @@ export function CreateIssueForm({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <IssueTemplatePicker />
-      <form action={createIssue} className="space-y-6">
+
+      <form action={createIssue}>
         {template ? <input type="hidden" name="template_id" value={template.id} /> : null}
         {parentIssueId ? <input type="hidden" name="parent_issue_id" value={parentIssueId} /> : null}
+
         {parentIssueId ? (
-          <p className="rounded-lg border border-border bg-secondary/40 px-3 py-2 text-sm text-muted-foreground">
+          <p className="mb-5 rounded-lg border border-border bg-secondary/40 px-3 py-2 text-sm text-muted-foreground">
             Creating a sub-issue linked to the parent work item.
           </p>
         ) : null}
 
-        <section className="space-y-3">
-          <label className="form-label" htmlFor="title">
-            Add a title
-          </label>
-          <Input id="title" name="title" className="h-12 text-base" placeholder="Fix broken prep sink..." defaultValue={defaultTitle} required />
-        </section>
+        <div className="grid gap-6 lg:grid-cols-[1fr_260px]">
+          {/* ── Left: title + description + attachments ── */}
+          <div className="space-y-5">
+            <section className="space-y-2">
+              <label className="form-label" htmlFor="title">
+                Title
+              </label>
+              <Input
+                id="title"
+                name="title"
+                className="h-12 text-base"
+                placeholder={mobile ? "What needs doing?" : "Fix broken prep sink…"}
+                defaultValue={defaultTitle}
+                required
+              />
+            </section>
 
-        <section className="space-y-2">
-          <label className="form-label" htmlFor="description">
-            Description
-          </label>
-          <MarkdownComposer
-            name="description"
-            defaultValue={defaultDescription}
-            placeholder="Describe the work in Markdown… Type @ to tag someone."
-            minHeight={mobile ? "min-h-32" : "min-h-48"}
-            mentionUsers={mentionUsers}
-            required
-          />
-        </section>
+            <section className="space-y-2">
+              <label className="form-label" htmlFor="description">
+                Description
+              </label>
+              <MarkdownComposer
+                name="description"
+                defaultValue={defaultDescription}
+                placeholder="Describe the work in Markdown… Type @ to tag someone."
+                minHeight={mobile ? "min-h-32" : "min-h-48"}
+                mentionUsers={mentionUsers}
+                required
+              />
+            </section>
 
-        {mobile ? (
-          <section className="rounded-lg border border-border bg-secondary/30 p-4">
-            <label className="form-label" htmlFor="attachment_url">Photo or file link</label>
-            <Input id="attachment_url" name="attachment_url" placeholder="Paste photo/file URL after upload" />
-            <p className="mt-2 text-xs text-muted-foreground">For camera-first work, attach the photo in the first comment after creation.</p>
-          </section>
-        ) : null}
-
-        <section className="grid gap-4 rounded-lg border border-border bg-secondary/30 p-4 sm:grid-cols-2">
-          <div>
-            <label className="form-label" htmlFor="kind">
-              Type
-            </label>
-            <SelectField name="kind" defaultValue={defaultKind} placeholder="Type" options={ISSUE_KINDS} ariaLabel="Issue type" />
-          </div>
-          <div>
-            <label className="form-label" htmlFor="priority">
-              Priority
-            </label>
-            <SelectField name="priority" defaultValue={defaultPriority} placeholder="Priority" options={ISSUE_PRIORITIES} ariaLabel="Issue priority" />
-          </div>
-          <div>
-            <label className="form-label" htmlFor="location_id">
-              Location
-            </label>
-            <SelectField
-              name="location_id"
-              defaultValue={defaultLocation}
-              placeholder="Location"
-              options={[{ value: "", label: "No location" }, ...locations.map((location) => ({ value: location.id, label: location.name }))]}
+            <IssueAttachmentFields
+              idPrefix="new-issue-attachment"
+              title={mobile ? "Store photo or evidence" : "Evidence"}
+              description={mobile ? "Photo, file, or vendor link" : "Quote, invoice, photo, or vendor thread"}
+              mobile={mobile}
             />
           </div>
-          <div>
-            <label className="form-label" htmlFor="project_id">
-              Project
-            </label>
-            <SelectField
-              name="project_id"
-              defaultValue=""
-              placeholder="Project"
-              options={[{ value: "", label: "No project" }, ...projects.map((project) => ({ value: project.id, label: project.title }))]}
-            />
-          </div>
-          <div>
-            <label className="form-label" htmlFor="due_at">
-              Due date
-            </label>
-            <Input id="due_at" name="due_at" type="date" defaultValue={defaultDue} />
-          </div>
-        </section>
 
-        <section className={mobile ? "grid gap-4" : "grid gap-4 sm:grid-cols-2"}>
-          <SidebarPeoplePicker
-            name="assignee_uids"
-            users={users.map(serializeUserProfile)}
-            selected={[]}
-            fieldLabel="Assignees"
-            dialogTitle="Set assignees"
-            display="embedded"
-          />
-          <SidebarListPicker
-            name="label_ids"
-            mode="multiple"
-            display="embedded"
-            fieldLabel="Labels"
-            dialogTitle="Apply labels"
-            filterPlaceholder="Filter labels"
-            options={labels.map((label) => ({ value: label.id, label: label.name }))}
-            selected={Array.from(defaultLabels)}
-          />
-        </section>
+          {/* ── Right: metadata sidebar ── */}
+          <aside className="rounded-lg border border-border bg-card shadow-card">
+            <div className="border-b border-border/80 px-4 py-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Details</p>
+            </div>
 
-        <div className="flex items-center justify-between border-t border-border pt-4">
-          <p className="text-xs text-muted-foreground">
-            {template ? `Using template: ${template.name}` : "Create the issue, then discuss updates in the timeline."}
-          </p>
-          <Button type="submit" className="bg-success text-success-foreground hover:bg-success/90">
-            Create issue
-          </Button>
+            <div className="divide-y divide-border/80 px-4">
+              <MetaRow label="Type">
+                <select name="kind" defaultValue={defaultKind} className="meta-select">
+                  {ISSUE_KINDS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </MetaRow>
+
+              <MetaRow label="Priority">
+                <select name="priority" defaultValue={defaultPriority} className="meta-select">
+                  {ISSUE_PRIORITIES.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </MetaRow>
+
+              <MetaRow label="Location">
+                <select name="location_id" defaultValue={defaultLocation} className="meta-select">
+                  <option value="">No location</option>
+                  {locations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>{loc.name}</option>
+                  ))}
+                </select>
+              </MetaRow>
+
+              <MetaRow label="Project">
+                <select name="project_id" defaultValue={defaultProjectId ?? ""} className="meta-select">
+                  <option value="">No project</option>
+                  {projects.map((proj) => (
+                    <option key={proj.id} value={proj.id}>{proj.title}</option>
+                  ))}
+                </select>
+              </MetaRow>
+
+              <MetaRow label="Due date">
+                <Input
+                  name="due_at"
+                  type="date"
+                  defaultValue={defaultDue}
+                  className="h-8 border-input/60 bg-transparent text-sm shadow-none"
+                />
+              </MetaRow>
+
+              <div className="py-3">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Assignees</p>
+                <SidebarPeoplePicker
+                  name="assignee_uids"
+                  users={users.map(serializeUserProfile)}
+                  selected={[]}
+                  fieldLabel="Assignees"
+                  dialogTitle="Set assignees"
+                  display="embedded"
+                />
+              </div>
+
+              <div className="py-3">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Labels</p>
+                <SidebarListPicker
+                  name="label_ids"
+                  mode="multiple"
+                  display="embedded"
+                  fieldLabel="Labels"
+                  dialogTitle="Apply labels"
+                  filterPlaceholder="Filter labels"
+                  options={labels.map((label) => ({ value: label.id, label: label.name }))}
+                  selected={Array.from(defaultLabels)}
+                />
+              </div>
+            </div>
+
+            <div className="border-t border-border/80 px-4 py-3">
+              <Button type="submit" className="w-full bg-success text-success-foreground hover:bg-success/90">
+                Create issue
+              </Button>
+              {template ? (
+                <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
+                  Using template: {template.name}
+                </p>
+              ) : null}
+            </div>
+          </aside>
         </div>
       </form>
+    </div>
+  );
+}
+
+function MetaRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="py-3">
+      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      {children}
     </div>
   );
 }

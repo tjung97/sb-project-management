@@ -12,7 +12,6 @@ import {
   parseIssueFilters,
   STATUS_OPTIONS,
 } from "@/src/lib/ops/issue-filters";
-import { Button } from "@/src/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/src/components/ui/popover";
 import { cn } from "@/src/lib/utils";
 

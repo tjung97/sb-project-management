@@ -142,6 +142,13 @@ service cloud.firestore {
       }
     }
 
+    match /calendar_events/{eventId} {
+      allow read, update, delete: if signedIn()
+        && resource.data.created_by_uid == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.created_by_uid == request.auth.uid;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

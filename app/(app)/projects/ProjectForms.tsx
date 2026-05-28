@@ -48,6 +48,15 @@ export function CreateProjectForm({ locations, users }: { locations: LocationWit
           </FormRow>
         </FormSection>
 
+        <FormSection title="Next decision" description="Keep the current action visible on the project page.">
+          <FormField label="Next step" htmlFor="create-next-step">
+            <Input id="create-next-step" name="next_step" placeholder="Get vendor quote approved" />
+          </FormField>
+          <FormField label="Blocked reason" htmlFor="create-blocked-reason">
+            <textarea id="create-blocked-reason" name="blocked_reason" className="form-textarea min-h-20" placeholder="Only fill this when the project is paused or blocked" />
+          </FormField>
+        </FormSection>
+
         <FormSection title="Scope">
           <LocationPickerField locations={locations} />
         </FormSection>
@@ -136,6 +145,21 @@ export function EditProjectForm({ project, locations, users }: { project: Projec
               name="due_at"
               type="date"
               defaultValue={project.due_at ? project.due_at.toDate().toISOString().slice(0, 10) : ""}
+            />
+          </FormField>
+        </FormSection>
+
+        <FormSection title="Next decision" description="The current decision or action that keeps this project moving.">
+          <FormField label="Next step" htmlFor="edit-next-step">
+            <Input id="edit-next-step" name="next_step" defaultValue={project.next_step ?? ""} placeholder="Confirm install date with vendor" />
+          </FormField>
+          <FormField label="Blocked reason" htmlFor="edit-blocked-reason">
+            <textarea
+              id="edit-blocked-reason"
+              name="blocked_reason"
+              className="form-textarea min-h-20"
+              defaultValue={project.blocked_reason ?? ""}
+              placeholder="What decision, vendor, or dependency is holding this up?"
             />
           </FormField>
         </FormSection>

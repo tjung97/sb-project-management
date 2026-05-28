@@ -4,7 +4,7 @@ import { useEffect } from "react";
 
 export function useAppShellHeaderMetrics(
   headerRef: React.RefObject<HTMLElement | null>,
-  deps: ReadonlyArray<unknown> = []
+  dependencyKey = ""
 ) {
   useEffect(() => {
     const el = headerRef.current;
@@ -24,5 +24,5 @@ export function useAppShellHeaderMetrics(
       observer.disconnect();
       window.removeEventListener("resize", sync);
     };
-  }, [headerRef, ...deps]);
+  }, [headerRef, dependencyKey]);
 }
