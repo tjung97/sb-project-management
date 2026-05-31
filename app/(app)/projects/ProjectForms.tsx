@@ -9,6 +9,7 @@ import {
 import { LocationPickerField } from "@/src/components/ops/LocationPickerField";
 import { Input } from "@/src/components/ui/input";
 import { SelectField } from "@/src/components/ui/select-field";
+import { DueDatePicker } from "@/src/components/ops/DueDatePicker";
 import { createProject, createProjectFromTemplate, updateProject } from "@/src/lib/ops/actions";
 import { PROJECT_TEMPLATES } from "@/src/lib/ops/project-templates";
 import type { LocationWithId, ProjectWithId, UserProfile } from "@/src/types/firestore";
@@ -42,8 +43,8 @@ export function CreateProjectForm({ locations, users }: { locations: LocationWit
             <FormField label="Owner">
               <SelectField name="owner_uid" defaultValue="" placeholder="Select owner" ariaLabel="Owner" options={ownerOptions(users)} />
             </FormField>
-            <FormField label="Due date" htmlFor="create-due">
-              <Input id="create-due" name="due_at" type="date" />
+            <FormField label="Due date">
+              <DueDatePicker name="due_at" />
             </FormField>
           </FormRow>
         </FormSection>
@@ -139,11 +140,9 @@ export function EditProjectForm({ project, locations, users }: { project: Projec
               />
             </FormField>
           </FormRow>
-          <FormField label="Due date" htmlFor="edit-due" hint="Target completion for the overall initiative.">
-            <Input
-              id="edit-due"
+          <FormField label="Due date" hint="Target completion for the overall initiative.">
+            <DueDatePicker
               name="due_at"
-              type="date"
               defaultValue={project.due_at ? project.due_at.toDate().toISOString().slice(0, 10) : ""}
             />
           </FormField>

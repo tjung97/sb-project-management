@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 import { Button } from "@/src/components/ui/button";
 import { Input } from "@/src/components/ui/input";
+import { SelectField } from "@/src/components/ui/select-field";
 import { IssueAttachmentFields } from "@/src/components/ops/IssueAttachmentFields";
 import { IssueTemplatePicker } from "@/src/components/ops/IssueTemplatePicker";
 import { MarkdownComposer } from "@/src/components/ops/MarkdownComposer";
+import { DueDatePicker } from "@/src/components/ops/DueDatePicker";
 import { SidebarListPicker } from "@/src/components/ops/SidebarListPicker";
 import { SidebarPeoplePicker } from "@/src/components/ops/SidebarPeoplePicker";
 import { buildMentionUsers } from "@/src/lib/ops/mentions";
@@ -115,46 +117,53 @@ export function CreateIssueForm({
 
             <div className="divide-y divide-border/80 px-4">
               <MetaRow label="Type">
-                <select name="kind" defaultValue={defaultKind} className="meta-select">
-                  {ISSUE_KINDS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                <SelectField
+                  name="kind"
+                  defaultValue={defaultKind}
+                  placeholder="Type"
+                  className="h-8 border-input/60 bg-transparent text-sm shadow-none"
+                  options={ISSUE_KINDS.map((opt) => ({ value: opt.value, label: opt.label }))}
+                />
               </MetaRow>
 
               <MetaRow label="Priority">
-                <select name="priority" defaultValue={defaultPriority} className="meta-select">
-                  {ISSUE_PRIORITIES.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                <SelectField
+                  name="priority"
+                  defaultValue={defaultPriority}
+                  placeholder="Priority"
+                  className="h-8 border-input/60 bg-transparent text-sm shadow-none"
+                  options={ISSUE_PRIORITIES.map((opt) => ({ value: opt.value, label: opt.label }))}
+                />
               </MetaRow>
 
               <MetaRow label="Location">
-                <select name="location_id" defaultValue={defaultLocation} className="meta-select">
-                  <option value="">No location</option>
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>{loc.name}</option>
-                  ))}
-                </select>
+                <SelectField
+                  name="location_id"
+                  defaultValue={defaultLocation}
+                  placeholder="No location"
+                  className="h-8 border-input/60 bg-transparent text-sm shadow-none"
+                  options={[
+                    { value: "", label: "No location" },
+                    ...locations.map((loc) => ({ value: loc.id, label: loc.name })),
+                  ]}
+                />
               </MetaRow>
 
               <MetaRow label="Project">
-                <select name="project_id" defaultValue={defaultProjectId ?? ""} className="meta-select">
-                  <option value="">No project</option>
-                  {projects.map((proj) => (
-                    <option key={proj.id} value={proj.id}>{proj.title}</option>
-                  ))}
-                </select>
+                <SelectField
+                  name="project_id"
+                  defaultValue={defaultProjectId ?? ""}
+                  placeholder="No project"
+                  className="h-8 border-input/60 bg-transparent text-sm shadow-none"
+                  options={[
+                    { value: "", label: "No project" },
+                    ...projects.map((proj) => ({ value: proj.id, label: proj.title })),
+                  ]}
+                />
               </MetaRow>
 
               <MetaRow label="Due date">
-                <Input
-                  name="due_at"
-                  type="date"
-                  defaultValue={defaultDue}
-                  className="h-8 border-input/60 bg-transparent text-sm shadow-none"
-                />
+                <DueDatePicker name="due_at" defaultValue={defaultDue} />
               </MetaRow>
 
               <div className="py-3">

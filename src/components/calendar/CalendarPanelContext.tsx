@@ -1,15 +1,19 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
 interface CalendarPanelContextValue {
   open: boolean;
+  hydrated: boolean;
   toggle: () => void;
+  close: () => void;
 }
 
 const CalendarPanelContext = createContext<CalendarPanelContextValue>({
   open: true,
+  hydrated: false,
   toggle: () => {},
+  close: () => {},
 });
 
 export function CalendarPanelProvider({ children }: { children: React.ReactNode }) {
@@ -17,21 +21,27 @@ export function CalendarPanelProvider({ children }: { children: React.ReactNode 
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem("calendar-panel-open");
-    if (stored !== null) setOpen(stored !== "false");
-    setHydrated(true);
+    const timer = window.setTimeout(() => {
+      setOpen(localStorage.getItem("calendar-panel-open") !== "false");
+      setHydrated(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
-  const toggle = () => {
+  const toggle = useCallback(() => {
     setOpen((v) => {
       const next = !v;
       localStorage.setItem("calendar-panel-open", String(next));
       return next;
     });
-  };
+  }, []);
 
-  if (!hydrated) return <CalendarPanelContext.Provider value={{ open: true, toggle }}>{children}</CalendarPanelContext.Provider>;
-  return <CalendarPanelContext.Provider value={{ open, toggle }}>{children}</CalendarPanelContext.Provider>;
+  const close = useCallback(() => {
+    setOpen(false);
+    localStorage.setItem("calendar-panel-open", "false");
+  }, []);
+
+  return <CalendarPanelContext.Provider value={{ open, hydrated, toggle, close }}>{children}</CalendarPanelContext.Provider>;
 }
 
 export function useCalendarPanel() {

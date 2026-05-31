@@ -2,9 +2,10 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { AlertCircle, CalendarDays, Plus, Trash2, X } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { AlertCircle, CalendarDays, CalendarIcon, Plus, Trash2, X } from "lucide-react";
 import { Calendar } from "@/src/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/src/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/src/components/ui/dialog";
 import { Button } from "@/src/components/ui/button";
 import { Input } from "@/src/components/ui/input";
@@ -19,6 +20,11 @@ function toLocalDateKey(date: Date): string {
 
 function formatDayHeader(date: Date): string {
   return date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+}
+
+function formatPickerDate(date: Date | undefined): string {
+  if (!date) return "Pick a date";
+  return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -36,11 +42,17 @@ export function CalendarSidebar({
   issues: SerializedIssueDue[];
 }) {
   const router = useRouter();
-  const { open, toggle } = useCalendarPanel();
+  const pathname = usePathname();
+  const { open, hydrated, toggle } = useCalendarPanel();
+  const routeCollapsed = hydrated && pathname.startsWith("/issues/");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [month, setMonth] = useState<Date>(new Date());
+
+  // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogDate, setDialogDate] = useState<string>("");
+  const [eventDate, setEventDate] = useState<Date | undefined>(new Date());
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+
   const [, startTransition] = useTransition();
 
   // Reconstruct Date objects from ms timestamps
@@ -53,10 +65,7 @@ export function CalendarSidebar({
   const dayEvents = events.filter((e) => toLocalDateKey(new Date(e.date_ms)) === selectedKey);
 
   function openNewEvent(date: Date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const d = String(date.getDate()).padStart(2, "0");
-    setDialogDate(`${y}-${m}-${d}`);
+    setEventDate(date);
     setDialogOpen(true);
   }
 
@@ -67,10 +76,20 @@ export function CalendarSidebar({
     });
   }
 
+  // Serialize date to YYYY-MM-DD for the hidden form input
+  function serializeDateForForm(date: Date | undefined): string {
+    if (!date) return "";
+    return toLocalDateKey(date);
+  }
+
   return (
     <>
       <aside
-        className={cn("calendar-panel", !open && "calendar-panel--closed")}
+        className={cn(
+          "calendar-panel liquid-side-panel",
+          hydrated && !open && "calendar-panel--closed",
+          routeCollapsed && "calendar-panel--route-collapsed"
+        )}
         aria-label="Calendar"
       >
         {/* Header */}
@@ -189,7 +208,7 @@ export function CalendarSidebar({
       </aside>
 
       {/* New event dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setDatePickerOpen(false); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>New event</DialogTitle>
@@ -202,21 +221,65 @@ export function CalendarSidebar({
             }}
             className="space-y-4 pt-2"
           >
+            {/* Hidden date value for FormData */}
+            <input type="hidden" name="date" value={serializeDateForForm(eventDate)} />
+
             <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="event-title">Title</label>
-              <Input id="event-title" name="title" placeholder="Team lunch, review deadline…" required />
+              <label className="text-sm font-medium" htmlFor="event-title">
+                Title
+              </label>
+              <Input
+                id="event-title"
+                name="title"
+                placeholder="Team lunch, review deadline…"
+                required
+              />
             </div>
+
+            {/* Shadcn date picker */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="event-date">Date</label>
-              <Input id="event-date" name="date" type="date" defaultValue={dialogDate} required />
+              <label className="text-sm font-medium">Date</label>
+              <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start gap-2 text-left font-normal",
+                      !eventDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="h-4 w-4 shrink-0 opacity-50" />
+                    {formatPickerDate(eventDate)}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={eventDate}
+                    onSelect={(d) => {
+                      setEventDate(d);
+                      setDatePickerOpen(false);
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
+
             <div className="space-y-1.5">
               <label className="text-sm font-medium" htmlFor="event-notes">
                 Notes{" "}
                 <span className="font-normal text-muted-foreground">(optional)</span>
               </label>
-              <Input id="event-notes" name="notes" placeholder="Location, link, details…" />
+              <Input
+                id="event-notes"
+                name="notes"
+                placeholder="Location, link, details…"
+              />
             </div>
+
+            {/* Color picker */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">
                 Color{" "}
@@ -228,7 +291,7 @@ export function CalendarSidebar({
                     <input type="radio" name="color" value={c} className="sr-only peer" />
                     <span
                       className={cn(
-                        "block h-5 w-5 rounded-full border-2 border-transparent transition-all peer-checked:border-foreground",
+                        "block h-5 w-5 rounded-full border-2 border-transparent ring-offset-background transition-all peer-checked:border-foreground peer-checked:ring-2 peer-checked:ring-ring/40 peer-checked:ring-offset-2",
                         c === "blue" && "bg-blue-500",
                         c === "green" && "bg-green-500",
                         c === "yellow" && "bg-yellow-400",
@@ -240,11 +303,20 @@ export function CalendarSidebar({
                 ))}
               </div>
             </div>
+
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDialogOpen(false)}
+              >
                 Cancel
               </Button>
-              <Button type="submit" className="bg-success text-success-foreground hover:bg-success/90">
+              <Button
+                type="submit"
+                disabled={!eventDate}
+                className="bg-success text-success-foreground hover:bg-success/90"
+              >
                 Create event
               </Button>
             </DialogFooter>

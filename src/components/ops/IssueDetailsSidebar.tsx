@@ -1,8 +1,11 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import { CalendarIcon, X } from "lucide-react";
 import { Button, buttonVariants } from "@/src/components/ui/button";
 import { Badge } from "@/src/components/ui/badge";
+import { Calendar } from "@/src/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/src/components/ui/popover";
 import { SidebarField, SidebarPickerPanel } from "@/src/components/ops/SidebarField";
 import { SidebarListPicker } from "@/src/components/ops/SidebarListPicker";
 import { SidebarPeoplePicker } from "@/src/components/ops/SidebarPeoplePicker";
@@ -208,12 +211,7 @@ export function IssueDetailsSidebar({
           summary={dueAt ? <span>{dueAt}</span> : <span className="text-muted-foreground">No due date</span>}
         >
           <SidebarPickerPanel>
-            <input
-              type="date"
-              value={dueAt}
-              onChange={(event) => setDueAt(event.target.value)}
-              className="form-select h-9 w-full"
-            />
+            <SidebarDueDatePicker value={dueAt} onChange={setDueAt} />
           </SidebarPickerPanel>
         </SidebarField>
 
@@ -252,5 +250,63 @@ export function IssueDetailsSidebar({
         </Button>
       </div>
     </aside>
+  );
+}
+
+function SidebarDueDatePicker({
+  value,
+  onChange,
+}: {
+  value: string; // YYYY-MM-DD or ""
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = value ? new Date(`${value}T12:00:00`) : undefined;
+
+  function toDateKey(date: Date): string {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className={cn(
+              "flex h-9 flex-1 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm shadow-sm transition-[border-color,box-shadow]",
+              "outline-none focus-visible:ring-2 focus-visible:ring-ring/45 focus-visible:ring-offset-1",
+              !selected && "text-muted-foreground"
+            )}
+          >
+            <CalendarIcon className="h-3.5 w-3.5 shrink-0 opacity-50" />
+            {selected
+              ? selected.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+              : "No due date"}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-auto p-0">
+          <Calendar
+            mode="single"
+            selected={selected}
+            onSelect={(d) => {
+              onChange(d ? toDateKey(d) : "");
+              setOpen(false);
+            }}
+            initialFocus
+          />
+        </PopoverContent>
+      </Popover>
+      {selected && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          title="Clear due date"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
   );
 }

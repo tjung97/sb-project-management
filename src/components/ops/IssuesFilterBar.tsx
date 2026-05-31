@@ -13,6 +13,7 @@ import {
   STATUS_OPTIONS,
 } from "@/src/lib/ops/issue-filters";
 import { Popover, PopoverContent, PopoverTrigger } from "@/src/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/src/components/ui/select";
 import { cn } from "@/src/lib/utils";
 
 const PRIORITY_OPTIONS = [
@@ -326,17 +327,18 @@ function FilterSelect({
   return (
     <div className="min-w-0 space-y-1">
       <label className="text-[11px] font-medium text-muted-foreground">{label}</label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm transition focus:outline-none focus:ring-1 focus:ring-ring"
-      >
-        {options.map((opt) => (
-          <option key={`${label}-${opt.value}`} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="h-9 w-full text-sm" aria-label={label}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((opt) => (
+            <SelectItem key={`${label}-${opt.value}`} value={opt.value}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

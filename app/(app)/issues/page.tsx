@@ -143,7 +143,7 @@ export default async function IssuesPage({
           )}
         </CardListBody>
         <div className="flex justify-end border-t border-border px-4 py-2">
-          <Suspense fallback={<span className="text-xs text-muted-foreground">Density…</span>}>
+          <Suspense fallback={<span className="text-xs text-muted-foreground">Density...</span>}>
             <IssuesDensityToggle />
           </Suspense>
         </div>

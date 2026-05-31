@@ -1061,26 +1061,94 @@
   }
 }
 
-/* ── Calendar panel ───────────────────────────────────── */
-.calendar-panel {
-  width: 280px;
+/* ── Liquid side panels ───────────────────────────────────── */
+.liquid-side-panel {
   flex-shrink: 0;
   position: sticky;
   top: var(--app-header-height, 64px);
   height: calc(100dvh - var(--app-header-height, 64px));
   overflow-y: auto;
   overflow-x: hidden;
-  border-left: 1px solid hsl(var(--border) / 0.6);
-  background: hsl(var(--card));
-  transition: width 0.35s var(--liquid-ease, cubic-bezier(0.22, 1, 0.36, 1)),
-    opacity 0.25s ease;
+  isolation: isolate;
+  background:
+    linear-gradient(145deg, hsl(0 0% 100% / 0.72), hsl(var(--card) / 0.54) 46%, hsl(var(--secondary) / 0.4)),
+    radial-gradient(120% 70% at 50% 0%, hsl(0 0% 100% / 0.46), transparent 62%);
+  backdrop-filter: blur(24px) saturate(1.25);
+  -webkit-backdrop-filter: blur(24px) saturate(1.25);
+  box-shadow:
+    0 0 0 0.5px hsl(0 0% 100% / 0.58) inset,
+    0 1px 0 hsl(0 0% 100% / 0.7) inset,
+    0 16px 32px -28px hsl(240 18% 20% / 0.45);
+  transition:
+    width 0.35s var(--liquid-ease, cubic-bezier(0.22, 1, 0.36, 1)),
+    opacity 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.25s ease;
 }
 
+.liquid-side-panel:hover,
+.liquid-side-panel:focus-within {
+  box-shadow:
+    0 0 0 0.5px hsl(0 0% 100% / 0.72) inset,
+    0 1px 0 hsl(0 0% 100% / 0.78) inset,
+    0 18px 42px -26px hsl(240 18% 20% / 0.5);
+}
+
+.dark .liquid-side-panel,
+:root:not(.light) .liquid-side-panel {
+  background:
+    linear-gradient(145deg, hsl(240 8% 24% / 0.66), hsl(240 7% 14% / 0.52) 50%, hsl(240 6% 10% / 0.36)),
+    radial-gradient(120% 70% at 50% 0%, hsl(0 0% 100% / 0.12), transparent 62%);
+  box-shadow:
+    0 0 0 0.5px hsl(0 0% 100% / 0.14) inset,
+    0 1px 0 hsl(0 0% 100% / 0.12) inset,
+    0 18px 42px -26px hsl(0 0% 0% / 0.64);
+}
+
+.dark .liquid-side-panel:hover,
+.dark .liquid-side-panel:focus-within,
+:root:not(.light) .liquid-side-panel:hover,
+:root:not(.light) .liquid-side-panel:focus-within {
+  box-shadow:
+    0 0 0 0.5px hsl(0 0% 100% / 0.18) inset,
+    0 1px 0 hsl(0 0% 100% / 0.16) inset,
+    0 20px 48px -28px hsl(0 0% 0% / 0.72);
+}
+
+.toast-panel {
+  width: 300px;
+  border-right: 1px solid hsl(var(--border) / 0.42);
+}
+
+.calendar-panel {
+  width: 280px;
+  border-left: 1px solid hsl(var(--border) / 0.42);
+}
+
+.toast-panel--closed,
 .calendar-panel--closed {
   width: 0;
   opacity: 0;
   overflow: hidden;
   pointer-events: none;
+}
+
+.toast-panel--route-collapsed,
+.calendar-panel--route-collapsed {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.toast-panel--closed,
+.toast-panel--route-collapsed {
+  transform: translateX(-100%);
+}
+
+.calendar-panel--closed,
+.calendar-panel--route-collapsed {
+  transform: translateX(100%);
 }
 
 /* Day events list fade+slide animation */
@@ -1100,36 +1168,46 @@
 }
 
 /* Dot indicators under date numbers (react-day-picker modifiers) */
-.rdp-day.cal-has-issue,
-.rdp-day.cal-has-event {
+.cal-has-issue,
+.cal-has-event {
   position: relative;
 }
 
-.rdp-day.cal-has-issue::after {
+.cal-has-issue::before,
+.cal-has-event::after {
   content: "";
   position: absolute;
-  bottom: 2px;
+  bottom: 3px;
   left: 50%;
   transform: translateX(-50%);
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
   border-radius: 9999px;
+  box-shadow: 0 0 0 1.5px hsl(var(--card) / 0.9);
+}
+
+.cal-has-issue::before {
   background: hsl(var(--muted-foreground) / 0.45);
 }
 
-.rdp-day.cal-has-event::after {
-  content: "";
-  position: absolute;
-  bottom: 2px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 4px;
-  height: 4px;
-  border-radius: 9999px;
+.cal-has-event::after {
   background: hsl(var(--primary));
 }
 
-/* When a day has both, the event dot wins (rendered on top via specificity) */
-.rdp-day.cal-has-issue.cal-has-event::after {
-  background: hsl(var(--primary));
+.cal-has-issue.cal-has-event::before {
+  transform: translateX(-7px);
+}
+
+.cal-has-issue.cal-has-event::after {
+  transform: translateX(2px);
+}
+
+.cal-has-issue[aria-selected="true"]::before {
+  background: hsl(var(--primary-foreground) / 0.66);
+  box-shadow: 0 0 0 1.5px hsl(var(--primary) / 0.85);
+}
+
+.cal-has-event[aria-selected="true"]::after {
+  background: hsl(var(--primary-foreground));
+  box-shadow: 0 0 0 1.5px hsl(var(--primary) / 0.85);
 }
