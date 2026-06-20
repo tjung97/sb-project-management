@@ -3,9 +3,12 @@ import {
   BarChart3,
   Briefcase,
   Building2,
+  CalendarRange,
   ClipboardList,
   FolderKanban,
   Inbox,
+  LayoutDashboard,
+  MessagesSquare,
   Settings,
   Store,
   TestTube2,
@@ -29,6 +32,18 @@ export type AppNavGroup = {
 
 export const NAV_GROUPS: AppNavGroup[] = [
   {
+    id: "overview",
+    label: "Overview",
+    items: [
+      {
+        href: "/",
+        label: "Dashboard",
+        icon: LayoutDashboard,
+        description: "Live overview of work, sales, labor, and store ops",
+      },
+    ],
+  },
+  {
     id: "work",
     label: "Work",
     items: [
@@ -49,6 +64,24 @@ export const NAV_GROUPS: AppNavGroup[] = [
         label: "Projects",
         icon: FolderKanban,
         description: "Multi-day initiatives and linked work",
+      },
+    ],
+  },
+  {
+    id: "operations",
+    label: "Operations",
+    items: [
+      {
+        href: "/operations",
+        label: "Store monitor",
+        icon: MessagesSquare,
+        description: "Sling chat activity and daily checklist compliance",
+      },
+      {
+        href: "/operations/schedule",
+        label: "Schedule",
+        icon: CalendarRange,
+        description: "This week and next week store scheduling from Sling",
       },
     ],
   },
@@ -113,8 +146,16 @@ export function navItemsForRole(role: string) {
 }
 
 export function isNavActive(pathname: string, href: string) {
+  if (href === "/") {
+    return pathname === "/";
+  }
   if (href === "/issues") {
     return pathname === "/issues" || (pathname.startsWith("/issues/") && !pathname.startsWith("/issues/new"));
+  }
+  // Store monitor lives at /operations; its sibling /operations/schedule is a
+  // separate nav item, so only match the monitor on its exact path.
+  if (href === "/operations") {
+    return pathname === "/operations";
   }
   return pathname === href || pathname.startsWith(`${href}/`);
 }

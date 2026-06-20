@@ -44,7 +44,7 @@ export function CalendarSidebar({
   const router = useRouter();
   const pathname = usePathname();
   const { open, hydrated, toggle } = useCalendarPanel();
-  const routeCollapsed = hydrated && pathname.startsWith("/issues/");
+  const routeCollapsed = hydrated && (pathname.startsWith("/issues/") || pathname.startsWith("/operations"));
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [month, setMonth] = useState<Date>(new Date());
 
