@@ -20,8 +20,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const graceParam = Number(request.nextUrl.searchParams.get("grace"));
-  const graceMin = Number.isFinite(graceParam) && graceParam >= 0 ? Math.trunc(graceParam) : undefined;
+  // Only override the default grace (30m) when a valid value is actually passed;
+  // Number(null) is 0, which would wrongly flag people the instant a shift starts.
+  const graceRaw = request.nextUrl.searchParams.get("grace");
+  const graceNum = graceRaw === null ? NaN : Number(graceRaw);
+  const graceMin = Number.isFinite(graceNum) && graceNum >= 0 ? Math.trunc(graceNum) : undefined;
 
   const nowParam = request.nextUrl.searchParams.get("now");
   const parsedNow = nowParam ? new Date(nowParam) : null;
