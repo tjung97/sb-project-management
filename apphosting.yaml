@@ -47,11 +47,49 @@ env:
   # Firebase App Hosting provides Application Default Credentials automatically,
   # which the admin SDK uses via the applicationDefault() fallback in src/lib/firebase/admin.ts.
 
-  # Optional: uncomment and configure these secrets via:
-  #   npx firebase-tools apphosting:secrets:set RESEND_API_KEY --project seoul-bowl-orders
+  # --- Sling / Toast / no-show: non-secret runtime values ---
+  - variable: SLING_SOURCES
+    value: "conversation:10157324,conversation:10157243,conversation:16626009,conversation:10157222"
+    availability:
+      - RUNTIME
+  - variable: STORE_TIMEZONE
+    value: America/Los_Angeles
+    availability:
+      - RUNTIME
+  - variable: TOAST_API_BASE_URL
+    value: https://ws-api.toasttab.com
+    availability:
+      - RUNTIME
+  - variable: TOAST_BUSINESS_TIME_ZONE
+    value: America/Los_Angeles
+    availability:
+      - RUNTIME
+
+  # --- Secrets: set each value with (they prompt for the value + offer to grant
+  #     backend access — say yes):
+  #   npx firebase-tools apphosting:secrets:set SLING_TOKEN --project seoul-bowl-orders
+  #   npx firebase-tools apphosting:secrets:set TOAST_CLIENT_ID --project seoul-bowl-orders
+  #   npx firebase-tools apphosting:secrets:set TOAST_CLIENT_SECRET --project seoul-bowl-orders
   #   npx firebase-tools apphosting:secrets:set SLACK_WEBHOOK_URL --project seoul-bowl-orders
-  #
-  # - variable: RESEND_API_KEY
-  #   secret: RESEND_API_KEY
-  # - variable: SLACK_WEBHOOK_URL
-  #   secret: SLACK_WEBHOOK_URL
+  #   npx firebase-tools apphosting:secrets:set CRON_SECRET --project seoul-bowl-orders
+  # These references are already wired — just create the secrets, then redeploy.
+  - variable: SLING_TOKEN
+    secret: SLING_TOKEN
+    availability:
+      - RUNTIME
+  - variable: TOAST_CLIENT_ID
+    secret: TOAST_CLIENT_ID
+    availability:
+      - RUNTIME
+  - variable: TOAST_CLIENT_SECRET
+    secret: TOAST_CLIENT_SECRET
+    availability:
+      - RUNTIME
+  - variable: SLACK_WEBHOOK_URL
+    secret: SLACK_WEBHOOK_URL
+    availability:
+      - RUNTIME
+  - variable: CRON_SECRET
+    secret: CRON_SECRET
+    availability:
+      - RUNTIME
