@@ -2,7 +2,9 @@ import { getCurrentUser } from "@/src/lib/firebase/auth-server";
 import { listCalendarEvents, listIssues, listProjects } from "@/src/lib/ops/data";
 import { getToastOpsSummary } from "@/src/lib/toast/api";
 import { getSlingMonitor } from "@/src/lib/sling/api";
+import { getRecentStockOutages } from "@/src/lib/ops/stock-events";
 import { HomeDashboard, type HomeDashboardData } from "@/src/components/home/HomeDashboard";
+import { StockAlertBanner } from "@/src/components/home/StockAlertBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -12,12 +14,13 @@ export default async function DashboardPage() {
   const user = await getCurrentUser();
   const uid = user?.uid ?? "";
 
-  const [issues, projects, calendar, toast, sling] = await Promise.all([
+  const [issues, projects, calendar, toast, sling, stockOutages] = await Promise.all([
     listIssues({ status: "all" }).catch(() => []),
     listProjects().catch(() => []),
     uid ? listCalendarEvents(uid).catch(() => []) : Promise.resolve([]),
     getToastOpsSummary().catch(() => null),
     getSlingMonitor().catch(() => null),
+    getRecentStockOutages().catch(() => []),
   ]);
 
   const now = new Date();
@@ -107,7 +110,12 @@ export default async function DashboardPage() {
     calendar: upcoming,
   };
 
-  return <HomeDashboard data={data} />;
+  return (
+    <>
+      <HomeDashboard data={data} />
+      <StockAlertBanner events={stockOutages} />
+    </>
+  );
 }
 
 function greeting(now: Date): string {

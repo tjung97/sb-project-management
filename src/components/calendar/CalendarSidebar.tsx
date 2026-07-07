@@ -44,7 +44,11 @@ export function CalendarSidebar({
   const router = useRouter();
   const pathname = usePathname();
   const { open, hydrated, toggle } = useCalendarPanel();
-  const routeCollapsed = hydrated && (pathname.startsWith("/issues/") || pathname.startsWith("/operations"));
+  // Route-based collapse is deterministic from the URL, so it must NOT be gated
+  // on `hydrated`: this component streams in via Suspense and hydrates after the
+  // provider's effect has already flipped `hydrated`, which made the client's
+  // hydration render disagree with the server HTML (hydration mismatch).
+  const routeCollapsed = pathname.startsWith("/issues/") || pathname.startsWith("/operations");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [month, setMonth] = useState<Date>(new Date());
 
@@ -85,6 +89,9 @@ export function CalendarSidebar({
   return (
     <>
       <aside
+        // The open/closed state comes from localStorage and can differ from the
+        // server HTML when this streamed component hydrates late — expected.
+        suppressHydrationWarning
         className={cn(
           "calendar-panel liquid-side-panel",
           hydrated && !open && "calendar-panel--closed",

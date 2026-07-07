@@ -4,88 +4,168 @@
       "collectionGroup": "issues",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "updated_at", "order": "DESCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updated_at",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "issues",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "project_id", "order": "ASCENDING" },
-        { "fieldPath": "updated_at", "order": "DESCENDING" }
+        {
+          "fieldPath": "project_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updated_at",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "issues",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "location_id", "order": "ASCENDING" },
-        { "fieldPath": "updated_at", "order": "DESCENDING" }
+        {
+          "fieldPath": "location_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updated_at",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "issues",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "assignee_uids", "arrayConfig": "CONTAINS" },
-        { "fieldPath": "updated_at", "order": "DESCENDING" }
+        {
+          "fieldPath": "assignee_uids",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "updated_at",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "comments",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        { "fieldPath": "author_uid", "order": "ASCENDING" },
-        { "fieldPath": "created_at", "order": "DESCENDING" }
+        {
+          "fieldPath": "author_uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "notificationInbox",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "uid", "order": "ASCENDING" },
-        { "fieldPath": "created_at", "order": "DESCENDING" }
+        {
+          "fieldPath": "uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "notificationInbox",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "uid", "order": "ASCENDING" },
-        { "fieldPath": "read", "order": "ASCENDING" }
+        {
+          "fieldPath": "uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "read",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "issues",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "parent_issue_id", "order": "ASCENDING" },
-        { "fieldPath": "updated_at", "order": "DESCENDING" }
+        {
+          "fieldPath": "parent_issue_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updated_at",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "recurringTemplates",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "active", "order": "ASCENDING" },
-        { "fieldPath": "next_run_at", "order": "ASCENDING" }
+        {
+          "fieldPath": "active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "next_run_at",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "calendar_events",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "created_by_uid", "order": "ASCENDING" },
-        { "fieldPath": "date", "order": "ASCENDING" }
+        {
+          "fieldPath": "created_by_uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "issues",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "due_at", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" }
+        {
+          "fieldPath": "due_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "stock_watch",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "still_out",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "out_since",
+          "order": "DESCENDING"
+        }
       ]
     }
   ],

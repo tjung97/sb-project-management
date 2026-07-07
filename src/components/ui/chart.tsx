@@ -56,7 +56,11 @@ function ChartContainer({
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer>{children}</RechartsPrimitive.ResponsiveContainer>
+        {/* initialDimension avoids the "-1 width/height" console warning when the
+            chart mounts inside a dialog before its first layout measurement. */}
+        <RechartsPrimitive.ResponsiveContainer initialDimension={{ width: 480, height: 256 }}>
+          {children}
+        </RechartsPrimitive.ResponsiveContainer>
       </div>
     </ChartContext.Provider>
   );

@@ -205,6 +205,36 @@ export const sendDailyDigest = onSchedule(
   }
 );
 
+// Triggers the no-show check on the deployed app every 15 min during operating
+// hours (covers every shift's start time, not just the opener). The app route
+// does the Sling+Toast detection, de-dupes, and posts to Slack.
+export const noShowCheck = onSchedule(
+  {
+    schedule: "*/15 6-22 * * *",
+    timeZone: "America/Los_Angeles",
+    region: "us-west1",
+  },
+  async () => {
+    const secret = process.env.CRON_SECRET;
+    const base = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL;
+    if (!secret || !base) {
+      logger.warn("noShowCheck: APP_URL or CRON_SECRET not set; skipping.");
+      return;
+    }
+    try {
+      const res = await fetch(`${base}/api/cron/no-show?notify=1&key=${encodeURIComponent(secret)}`);
+      const data = (await res.json().catch(() => ({}))) as { totals?: { noShows?: number }; notified?: { posted?: number } };
+      logger.info("noShowCheck ran", {
+        status: res.status,
+        noShows: data.totals?.noShows ?? null,
+        posted: data.notified?.posted ?? null,
+      });
+    } catch (err) {
+      logger.error("noShowCheck failed", { error: (err as Error).message });
+    }
+  }
+);
+
 export const escalateStaleWork = onSchedule(
   {
     schedule: "every 6 hours",

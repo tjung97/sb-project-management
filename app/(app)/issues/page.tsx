@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { Download, Plus } from "lucide-react";
+import { Download, Network, Plus } from "lucide-react";
 import { buttonVariants } from "@/src/components/ui/button";
 import { cn } from "@/src/lib/utils";
 import { CardListBody } from "@/src/components/ui/card";
@@ -80,6 +80,10 @@ export default async function IssuesPage({
         title="Issues"
         description="Location overview, filters, and the work queue for your scope."
       >
+        <Link href="/issues/tree" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+          <Network className="h-3.5 w-3.5" />
+          Map view
+        </Link>
         <Link
           href={`/api/exports/issues${exportParams.toString() ? `?${exportParams.toString()}` : ""}`}
           className={cn(buttonVariants({ variant: "outline", size: "sm" }))}

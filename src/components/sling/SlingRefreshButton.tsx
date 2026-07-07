@@ -27,8 +27,12 @@ export function SlingRefreshButton({ computedAt }: { computedAt?: string }) {
 
   return (
     <div className="flex items-center gap-3">
+      {/* suppressHydrationWarning: relative time depends on Date.now(), so the
+          server and client renders can straddle a minute boundary. */}
       {computedAt ? (
-        <span className="text-[11px] text-muted-foreground">Updated {formatRelative(computedAt)}</span>
+        <span suppressHydrationWarning className="text-[11px] text-muted-foreground">
+          Updated {formatRelative(computedAt)}
+        </span>
       ) : null}
       <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
         <RotateCw className={cn("mr-1.5 h-3.5 w-3.5", loading && "animate-spin")} />

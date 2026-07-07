@@ -9,6 +9,7 @@ import {
   Inbox,
   LayoutDashboard,
   MessagesSquare,
+  Network,
   Settings,
   Store,
   TestTube2,
@@ -52,6 +53,12 @@ export const NAV_GROUPS: AppNavGroup[] = [
         label: "Issues",
         icon: ClipboardList,
         description: "Queue, filters, and location overview",
+      },
+      {
+        href: "/issues/tree",
+        label: "Issue map",
+        icon: Network,
+        description: "Branching map of issues with live progress",
       },
       {
         href: "/inbox",
@@ -150,7 +157,10 @@ export function isNavActive(pathname: string, href: string) {
     return pathname === "/";
   }
   if (href === "/issues") {
-    return pathname === "/issues" || (pathname.startsWith("/issues/") && !pathname.startsWith("/issues/new"));
+    return (
+      pathname === "/issues" ||
+      (pathname.startsWith("/issues/") && !pathname.startsWith("/issues/new") && !pathname.startsWith("/issues/tree"))
+    );
   }
   // Store monitor lives at /operations; its sibling /operations/schedule is a
   // separate nav item, so only match the monitor on its exact path.

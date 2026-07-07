@@ -24,7 +24,9 @@ const compactMoney = new Intl.NumberFormat("en-US", { style: "currency", currenc
 export function ToastOpsSidebar({ stores }: { stores: ToastStoreSummary[] }) {
   const pathname = usePathname();
   const { open, hydrated, toggle } = useToastPanel();
-  const routeCollapsed = hydrated && (pathname.startsWith("/issues/") || pathname.startsWith("/operations"));
+  // Deterministic from the URL — not gated on `hydrated` (see CalendarSidebar:
+  // gating caused a hydration mismatch because this streams in via Suspense).
+  const routeCollapsed = pathname.startsWith("/issues/") || pathname.startsWith("/operations");
 
   const configured = stores.some((s) => s.summary.configured);
   const setupError = stores.find((s) => s.summary.error)?.summary.error ?? null;
@@ -37,6 +39,9 @@ export function ToastOpsSidebar({ stores }: { stores: ToastStoreSummary[] }) {
 
   return (
     <aside
+      // The open/closed state comes from localStorage and can differ from the
+      // server HTML when this streamed component hydrates late — expected.
+      suppressHydrationWarning
       className={cn(
         "toast-panel liquid-side-panel",
         hydrated && !open && "toast-panel--closed",

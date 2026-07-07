@@ -107,8 +107,12 @@ function StoreRow({ store, open, onToggle }: { store: StoreMonitor; open: boolea
           <ScheduleBadge state={store.schedule.state} />
         </div>
 
-        {/* Last post */}
-        <div className={cn("text-xs tabular-nums", stale ? "font-medium text-destructive" : "text-muted-foreground")}>
+        {/* Last post — Date.now()-relative, so server/client renders can differ
+            by a minute tick; suppress the hydration diff on this element. */}
+        <div
+          suppressHydrationWarning
+          className={cn("text-xs tabular-nums", stale ? "font-medium text-destructive" : "text-muted-foreground")}
+        >
           {store.lastPostAt ? relative(store.lastPostAt) : "none"}
         </div>
 
@@ -191,6 +195,8 @@ function ChecklistDot({ slot }: { slot: ChecklistSlot }) {
   const tone = SLOT_TONE[slot.status];
   return (
     <span
+      // title embeds a Date.now()-relative time — suppress the hydration diff.
+      suppressHydrationWarning
       className={cn("flex h-5 w-5 items-center justify-center rounded-md border", tone.box)}
       title={`${slot.label}: ${SLOT_WORD[slot.status]}${slot.at ? ` (${relative(slot.at)})` : ""}`}
     >

@@ -391,6 +391,11 @@ export async function createIssue(formData: FormData) {
   await recalculateProject(projectId);
   revalidatePath("/issues");
   if (projectId) revalidatePath(`/projects/${projectId}`);
+  // Inline flows (e.g. branching from the issue map's side panel) pass
+  // stay_on_page so they can keep their current view and refresh in place.
+  if (optionalString(formData, "stay_on_page")) {
+    return;
+  }
   redirect(`/issues/${issueRef.id}`);
 }
 
