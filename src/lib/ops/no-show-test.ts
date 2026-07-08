@@ -19,7 +19,6 @@ export const TEST_SCHEDULE_OVERRIDES: TestShift[] = [
   { store: "Seattle", person: "Test Noshow", role: "Cook", start: "07:00" },
 ];
 
-// Only send Slack alerts for this store (should match the channel your webhook
-// posts to), so a real no-show elsewhere doesn't hit your test channel. Set to
-// null when you go live and want every store to alert.
-export const NOTIFY_ONLY_STORE: string | null = "Seattle";
+// NOTE: which stores get alerted (and on/off, grace, webhook, excluded roles) is
+// now managed from the Operations tab (Firestore config), not here. Empty the
+// array above to stop the fake test shift once you're done validating.

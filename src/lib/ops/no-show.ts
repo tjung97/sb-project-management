@@ -5,7 +5,8 @@ import { adminDb } from "@/src/lib/firebase/admin";
 import { getSlingScheduleBoard } from "@/src/lib/sling/api";
 import { getAllToastOpsSummaries } from "@/src/lib/toast/api";
 import { PERSON_ALIASES, STORE_ALIASES } from "@/src/lib/ops/staff-aliases";
-import { NOTIFY_ONLY_STORE, TEST_SCHEDULE_OVERRIDES } from "@/src/lib/ops/no-show-test";
+import { TEST_SCHEDULE_OVERRIDES } from "@/src/lib/ops/no-show-test";
+import { getNoShowConfig } from "@/src/lib/ops/no-show-config";
 
 // No-show detection (DRY RUN). Joins two systems:
 //   • Sling  = who is *scheduled* today (role, start time, store)
@@ -52,7 +53,9 @@ export interface NoShowReport {
 
 export async function detectNoShows(opts: { now?: Date; graceMin?: number } = {}): Promise<NoShowReport> {
   const now = opts.now ?? new Date();
-  const graceMin = opts.graceMin ?? DEFAULT_GRACE_MIN;
+  // Grace precedence: explicit param (e.g. ?grace=) > saved config > 30-min default.
+  const config = await getNoShowConfig();
+  const graceMin = opts.graceMin ?? config.graceMinutes ?? DEFAULT_GRACE_MIN;
 
   const empty = (error: string | null, configured = false): NoShowReport => ({
     configured,
@@ -173,15 +176,20 @@ export interface NotifyResult {
 }
 
 // Posts a Slack message per no-show, de-duped so each person/shift/day only
-// alerts once (pass force to bypass, for testing). Scoped to NOTIFY_ONLY_STORE.
+// alerts once (pass force to bypass, for testing). All behaviour (on/off, which
+// stores, webhook, excluded roles) comes from the Firestore config editable in
+// the Operations tab.
 export async function notifyNoShows(report: NoShowReport, opts: { force?: boolean } = {}): Promise<NotifyResult> {
-  const webhook = (process.env.SLACK_WEBHOOK_URL ?? "").trim();
-  if (!webhook) return { posted: 0, skipped: 0, error: "SLACK_WEBHOOK_URL is not set." };
+  const config = await getNoShowConfig();
+  if (!config.enabled) return { posted: 0, skipped: 0, error: "No-show alerts are turned off." };
 
-  const onlyCity = NOTIFY_ONLY_STORE ? cityKey(NOTIFY_ONLY_STORE) : null;
-  const events = report.stores.flatMap((s) =>
-    s.scheduled.filter((p) => p.status === "no_show").map((p) => ({ store: s.slingStore, ...p }))
-  ).filter((e) => !onlyCity || cityKey(e.store) === onlyCity);
+  const webhook = (config.webhookUrl ?? process.env.SLACK_WEBHOOK_URL ?? "").trim();
+  if (!webhook) return { posted: 0, skipped: 0, error: "No Slack webhook configured." };
+
+  const scopeCities = config.storeScope === "all" ? null : new Set(config.storeScope.map((s) => cityKey(s)));
+  const events = report.stores
+    .flatMap((s) => s.scheduled.filter((p) => p.status === "no_show").map((p) => ({ store: s.slingStore, ...p })))
+    .filter((e) => (!scopeCities || scopeCities.has(cityKey(e.store))) && !config.excludeRoles.includes(e.role.toLowerCase()));
 
   const dateKey = report.nowIso.slice(0, 10);
   let posted = 0;

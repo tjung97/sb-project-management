@@ -743,6 +743,34 @@ export async function restoreIssue(issueId: string) {
   revalidatePath("/issues");
 }
 
+export async function updateNoShowConfig(formData: FormData) {
+  const user = await currentUserOrThrow();
+  requireAdminRole(user);
+
+  const grace = Number(formData.get("grace_minutes"));
+  const scopeAll = formData.get("store_scope_all") === "on";
+  const stores = values(formData, "store_scope"); // Sling store names checked in the UI
+  const webhook = optionalString(formData, "webhook_url");
+  const excludeRoles = (optionalString(formData, "exclude_roles") ?? "")
+    .split(",")
+    .map((r) => r.trim().toLowerCase())
+    .filter(Boolean);
+
+  await adminDb.collection("ops_config").doc("no_show").set(
+    {
+      enabled: formData.get("enabled") === "on",
+      grace_minutes: Number.isFinite(grace) && grace >= 0 ? Math.trunc(grace) : 30,
+      webhook_url: webhook ?? null,
+      store_scope: scopeAll || stores.length === 0 ? "all" : stores,
+      exclude_roles: excludeRoles,
+      updated_at: FieldValue.serverTimestamp(),
+      updated_by_uid: user.uid,
+    },
+    { merge: true }
+  );
+  revalidatePath("/operations");
+}
+
 export async function createProject(formData: FormData) {
   const user = await currentUserOrThrow();
   requireAdminRole(user);

@@ -4,13 +4,22 @@ import { Card, CardContent } from "@/src/components/ui/card";
 import { SlingRefreshButton } from "@/src/components/sling/SlingRefreshButton";
 import { SlingMonitorBoard } from "@/src/components/sling/SlingMonitorBoard";
 import { ToastOutOfStockPanel } from "@/src/components/toast/ToastOutOfStockPanel";
+import { NoShowSettings } from "@/src/components/ops/NoShowSettings";
 import { getSlingMonitor } from "@/src/lib/sling/api";
 import { getAllToastOutOfStock } from "@/src/lib/toast/api";
+import { getNoShowConfig } from "@/src/lib/ops/no-show-config";
+import { getCurrentUser } from "@/src/lib/firebase/auth-server";
 
 export const dynamic = "force-dynamic";
 
 export default async function OperationsPage() {
-  const [monitor, stock] = await Promise.all([getSlingMonitor(), getAllToastOutOfStock().catch(() => [])]);
+  const [monitor, stock, noShowConfig, user] = await Promise.all([
+    getSlingMonitor(),
+    getAllToastOutOfStock().catch(() => []),
+    getNoShowConfig(),
+    getCurrentUser(),
+  ]);
+  const isAdmin = user?.role === "admin";
 
   return (
     <div className="space-y-6">
@@ -44,6 +53,10 @@ export default async function OperationsPage() {
             />
             <Kpi label="Schedules posted" value={`${monitor.summary.schedulesPosted}/${monitor.summary.total}`} />
           </div>
+
+          {isAdmin ? (
+            <NoShowSettings config={noShowConfig} storeNames={monitor.stores.map((s) => s.name)} />
+          ) : null}
 
           {stock.length ? <ToastOutOfStockPanel stores={stock} /> : null}
 
