@@ -524,6 +524,49 @@ export function clearSlingCache(): void {
   snapshotCache = null;
 }
 
+// ---- Conversations (list + post) — used by the out-of-stock alert ----------
+
+export interface SlingChat {
+  id: string;
+  name: string;
+}
+
+function slingTokenOrThrow(): string {
+  const token = (process.env.SLING_TOKEN ?? "").trim();
+  if (!token) throw new SlingAuthError("SLING_TOKEN is not set.");
+  return token;
+}
+
+/** Every Sling chat the token's user belongs to (store Team chats first). */
+export async function listSlingChats(): Promise<SlingChat[]> {
+  const payload = await slingGet({ token: slingTokenOrThrow() } as SlingConfig, "/conversations", { pagesize: "500" });
+  const chats = extractItems(payload)
+    .map(asRecord)
+    .filter((c) => c.archived !== true)
+    .flatMap((c) => {
+      const id = c.id == null ? null : String(c.id);
+      return id ? [{ id, name: str(c.name) ?? `Chat ${id}` }] : [];
+    });
+  const isTeam = (n: string) => /\bteam\b/i.test(n);
+  return chats.sort((a, b) => Number(isTeam(b.name)) - Number(isTeam(a.name)) || a.name.localeCompare(b.name));
+}
+
+/** Post a plain-text message to a Sling chat as the token's user. */
+export async function postSlingMessage(conversationId: string, content: string): Promise<void> {
+  const response = await fetch(`${BASE_URL}/conversations/${encodeURIComponent(conversationId)}/messages`, {
+    method: "POST",
+    headers: { Authorization: slingTokenOrThrow(), "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
+  if (response.status === 401) {
+    throw new SlingAuthError("Sling token was rejected (401). Paste a fresh browser token into SLING_TOKEN.");
+  }
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`Sling post to chat ${conversationId} failed (${response.status}): ${body.slice(0, 160)}`);
+  }
+}
+
 // ---- Derivations -----------------------------------------------------------
 
 function buildWeek(

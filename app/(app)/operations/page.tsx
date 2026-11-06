@@ -5,21 +5,35 @@ import { SlingRefreshButton } from "@/src/components/sling/SlingRefreshButton";
 import { SlingMonitorBoard } from "@/src/components/sling/SlingMonitorBoard";
 import { ToastOutOfStockPanel } from "@/src/components/toast/ToastOutOfStockPanel";
 import { NoShowSettings } from "@/src/components/ops/NoShowSettings";
-import { getSlingMonitor } from "@/src/lib/sling/api";
+import { OutOfStockAlertSettings } from "@/src/components/ops/OutOfStockAlertSettings";
+import { getSlingMonitor, listSlingChats, type SlingChat } from "@/src/lib/sling/api";
 import { getAllToastOutOfStock } from "@/src/lib/toast/api";
 import { getNoShowConfig } from "@/src/lib/ops/no-show-config";
+import { getOutOfStockAlertConfig } from "@/src/lib/ops/out-of-stock-alert-config";
 import { getCurrentUser } from "@/src/lib/firebase/auth-server";
 
 export const dynamic = "force-dynamic";
 
 export default async function OperationsPage() {
-  const [monitor, stock, noShowConfig, user] = await Promise.all([
+  const [monitor, stock, noShowConfig, oosConfig, user] = await Promise.all([
     getSlingMonitor(),
     getAllToastOutOfStock().catch(() => []),
     getNoShowConfig(),
+    getOutOfStockAlertConfig(),
     getCurrentUser(),
   ]);
   const isAdmin = user?.role === "admin";
+
+  // Sling chat list for the out-of-stock alert picker (admins only).
+  let slingChats: SlingChat[] = [];
+  let slingChatsError: string | null = null;
+  if (isAdmin) {
+    try {
+      slingChats = await listSlingChats();
+    } catch (error) {
+      slingChatsError = error instanceof Error ? error.message : "Sling chats could not be loaded.";
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -56,6 +70,15 @@ export default async function OperationsPage() {
 
           {isAdmin ? (
             <NoShowSettings config={noShowConfig} storeNames={monitor.stores.map((s) => s.name)} />
+          ) : null}
+
+          {isAdmin ? (
+            <OutOfStockAlertSettings
+              config={oosConfig}
+              stores={stock.map((s) => ({ guid: s.guid, name: s.name }))}
+              chats={slingChats}
+              chatsError={slingChatsError}
+            />
           ) : null}
 
           {stock.length ? <ToastOutOfStockPanel stores={stock} /> : null}

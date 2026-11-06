@@ -235,6 +235,33 @@ export const noShowCheck = onSchedule(
   }
 );
 
+// Ticks the out-of-stock → Sling alert every 15 min. The app route reads the
+// send time/days/chats from Firestore (Operations tab) and only sends once per
+// day at the configured time, so changing the time needs no redeploy.
+export const outOfStockAlert = onSchedule(
+  {
+    schedule: "*/15 * * * *",
+    timeZone: "America/Los_Angeles",
+    region: "us-west1",
+  },
+  async () => {
+    const secret = process.env.CRON_SECRET;
+    const base = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL;
+    if (!secret || !base) {
+      logger.warn("outOfStockAlert: APP_URL or CRON_SECRET not set; skipping.");
+      return;
+    }
+    try {
+      const res = await fetch(`${base}/api/cron/out-of-stock?key=${encodeURIComponent(secret)}`);
+      const data = (await res.json().catch(() => ({}))) as { status?: string; reason?: string | null; posted?: number; errors?: string[] };
+      const log = data.status === "failed" || data.status === "partial" ? logger.error : logger.info;
+      log("outOfStockAlert ran", { http: res.status, status: data.status, reason: data.reason, posted: data.posted, errors: data.errors });
+    } catch (err) {
+      logger.error("outOfStockAlert failed", { error: (err as Error).message });
+    }
+  }
+);
+
 export const escalateStaleWork = onSchedule(
   {
     schedule: "every 6 hours",
