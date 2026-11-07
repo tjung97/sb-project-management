@@ -10,6 +10,7 @@ import { getSlingMonitor, listSlingChats, type SlingChat } from "@/src/lib/sling
 import { getAllToastOutOfStock } from "@/src/lib/toast/api";
 import { getNoShowConfig } from "@/src/lib/ops/no-show-config";
 import { getOutOfStockAlertConfig } from "@/src/lib/ops/out-of-stock-alert-config";
+import { toAlertStores } from "@/src/lib/ops/out-of-stock-alert";
 import { getCurrentUser } from "@/src/lib/firebase/auth-server";
 
 export const dynamic = "force-dynamic";
@@ -75,13 +76,13 @@ export default async function OperationsPage() {
           {isAdmin ? (
             <OutOfStockAlertSettings
               config={oosConfig}
-              stores={stock.map((s) => ({ guid: s.guid, name: s.name }))}
+              stores={toAlertStores(stock)}
               chats={slingChats}
               chatsError={slingChatsError}
             />
           ) : null}
 
-          {stock.length ? <ToastOutOfStockPanel stores={stock} /> : null}
+          {stock.length ? <ToastOutOfStockPanel stores={stock} ignored={oosConfig.ignoredItems} /> : null}
 
           {monitor.stores.length ? (
             <SlingMonitorBoard stores={monitor.stores} />

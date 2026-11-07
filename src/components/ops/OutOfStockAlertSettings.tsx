@@ -10,14 +10,30 @@ import {
 import { cn } from "@/src/lib/utils";
 import type { OutOfStockAlertConfig } from "@/src/lib/ops/out-of-stock-alert-config";
 import type { OutOfStockAlertResult } from "@/src/lib/ops/out-of-stock-alert";
+import {
+  DEFAULT_OOS_HEADER,
+  IGNORE_ALL_KEY,
+  OOS_PLACEHOLDERS,
+  applyIgnores,
+  buildMessages,
+  itemKey,
+  formatAllStoresMessage,
+  type AlertStore,
+} from "@/src/lib/ops/out-of-stock-message";
 
 interface Chat {
   id: string;
   name: string;
 }
-interface Store {
-  guid: string;
-  name: string;
+type Store = AlertStore;
+
+function todayLabel() {
+  return new Date().toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "America/Los_Angeles",
+  });
 }
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -37,7 +53,10 @@ function daysSummary(days: number[]) {
   if (days.length === 7) return "daily";
   if (days.length === 5 && [1, 2, 3, 4, 5].every((d) => days.includes(d))) return "weekdays";
   if (!days.length) return "no days";
-  return [...days].sort().map((d) => DAY_LABELS[d]).join(", ");
+  return [...days]
+    .sort()
+    .map((d) => DAY_LABELS[d])
+    .join(", ");
 }
 
 // Operations-tab settings for the daily Toast out-of-stock → Sling alert. Admin-only.
@@ -62,6 +81,22 @@ export function OutOfStockAlertSettings({
 
   const [enabled, setEnabled] = useState(config.enabled);
   const [days, setDays] = useState<number[]>(config.days);
+  const [sendWhenEmpty, setSendWhenEmpty] = useState(config.sendWhenEmpty);
+  const [header, setHeader] = useState(config.headerTemplate);
+  const [footer, setFooter] = useState(config.footerTemplate);
+  const [ignored, setIgnored] = useState<Record<string, string[]>>(config.ignoredItems);
+
+  const toggleIgnored = (key: string, item: string) => {
+    setIgnored((cur) => {
+      const list = cur[key] ?? [];
+      const has = list.some((x) => itemKey(x) === itemKey(item));
+      return {
+        ...cur,
+        [key]: has ? list.filter((x) => itemKey(x) !== itemKey(item)) : [...list, item],
+      };
+    });
+    touch();
+  };
   const [routes, setRoutes] = useState<Record<string, string[]>>(() => ({
     [ALL_KEY]: config.allStoresChats,
     ...Object.fromEntries(stores.map((s) => [s.guid, config.storeChats[s.guid] ?? []])),
@@ -69,6 +104,30 @@ export function OutOfStockAlertSettings({
 
   const sortedStores = useMemo(() => [...stores].sort((a, b) => label(a.name).localeCompare(label(b.name))), [stores]);
   const chatCount = new Set(Object.values(routes).flat()).size;
+
+  // Live preview: same formatter the cron uses, fed with the stock on this page.
+  const preview = useMemo(() => {
+    const date = todayLabel();
+    const routing = {
+      allStoresChats: routes[ALL_KEY] ?? [],
+      storeChats: Object.fromEntries(Object.entries(routes).filter(([k]) => k !== ALL_KEY)),
+      sendWhenEmpty,
+      headerTemplate: header,
+      footerTemplate: footer,
+      ignoredItems: ignored,
+    };
+    const planned = buildMessages(routing, stores, new Map(chats.map((c) => [c.id, c.name])), date);
+    if (planned.length) return planned;
+    // No chats picked yet: still show what the combined message looks like.
+    return [
+      {
+        chatId: "example",
+        chatName: "Example (no chats picked)",
+        scope: "all" as const,
+        content: formatAllStoresMessage(applyIgnores(stores, ignored), routing, date),
+      },
+    ];
+  }, [routes, sendWhenEmpty, header, footer, ignored, stores, chats]);
 
   const touch = () => {
     setDirty(true);
@@ -109,7 +168,7 @@ export function OutOfStockAlertSettings({
         <span
           className={cn(
             "rounded-full px-2 py-0.5 text-[10px] font-medium",
-            config.enabled ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
+            config.enabled ? "bg-success/15 text-success" : "bg-muted text-muted-foreground",
           )}
         >
           {config.enabled ? "On" : "Off"}
@@ -159,7 +218,7 @@ export function OutOfStockAlertSettings({
                     key={d}
                     className={cn(
                       "cursor-pointer rounded-md border px-2 py-1 text-[11px] font-medium transition",
-                      on ? "border-info/50 bg-info/10 text-info" : "border-border/80 text-muted-foreground"
+                      on ? "border-info/50 bg-info/10 text-info" : "border-border/80 text-muted-foreground",
                     )}
                   >
                     <input
@@ -178,10 +237,98 @@ export function OutOfStockAlertSettings({
           </div>
 
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" name="send_when_empty" defaultChecked={config.sendWhenEmpty} className="h-4 w-4 rounded border-border" />
+            <input
+              type="checkbox"
+              name="send_when_empty"
+              checked={sendWhenEmpty}
+              onChange={(e) => setSendWhenEmpty(e.target.checked)}
+              className="h-4 w-4 rounded border-border"
+            />
             <span>Still send when nothing is out of stock</span>
-            <span className="text-[11px] text-muted-foreground">(&quot;✅ nothing 86&apos;d&quot;)</span>
           </label>
+
+          {/* items left out of the alert */}
+          <IgnoreSection stores={sortedStores} ignored={ignored} onToggle={toggleIgnored} />
+
+          {/* message template + live preview */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-medium">Message</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Each store&apos;s items are listed one per line. You can change the top and bottom lines.
+                </p>
+              </div>
+              <label className="block space-y-1">
+                <span className="text-xs text-muted-foreground">Header</span>
+                <input
+                  name="header_template"
+                  value={header}
+                  onChange={(e) => setHeader(e.target.value)}
+                  placeholder={DEFAULT_OOS_HEADER}
+                  className="h-8 w-full rounded-lg border border-border/80 bg-background px-2 text-sm outline-none focus:border-info/60"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs text-muted-foreground">Footer (optional)</span>
+                <textarea
+                  name="footer_template"
+                  value={footer}
+                  onChange={(e) => setFooter(e.target.value)}
+                  rows={2}
+                  placeholder="e.g. Please update us when restocked"
+                  className="w-full rounded-lg border border-border/80 bg-background px-2 py-1.5 text-sm outline-none focus:border-info/60"
+                />
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {OOS_PLACEHOLDERS.map((p) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    title={p.hint}
+                    onClick={() => {
+                      setHeader((h) => `${h}${h.endsWith(" ") || !h ? "" : " "}${p.key}`);
+                      touch();
+                    }}
+                    className="rounded-md border border-border/80 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground hover:bg-muted"
+                  >
+                    {p.key}
+                  </button>
+                ))}
+                <span className="text-[11px] text-muted-foreground">tap to add to header · hover for meaning</span>
+              </div>
+              {header !== DEFAULT_OOS_HEADER || footer ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHeader(DEFAULT_OOS_HEADER);
+                    setFooter("");
+                    touch();
+                  }}
+                  className="text-[11px] text-info hover:underline"
+                >
+                  Reset to default
+                </button>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Live preview</p>
+              <div className="max-h-96 space-y-3 overflow-y-auto rounded-lg border border-border/70 bg-muted/30 p-3">
+                {preview.map((m, i) => (
+                  <div key={`${m.chatId}-${i}`} className="space-y-1">
+                    <p className="text-[11px] text-muted-foreground">
+                      → <span className="font-medium text-foreground">{m.chatName}</span>
+                      {m.storeName ? ` (${m.storeName} only)` : " (all stores)"}
+                    </p>
+                    <pre className="whitespace-pre-wrap rounded-md bg-background p-2 font-sans text-xs">{m.content}</pre>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Uses the stock on this page. The real message re-checks Toast when it sends.
+              </p>
+            </div>
+          </div>
 
           {/* routing */}
           <div className="space-y-2">
@@ -267,6 +414,129 @@ export function OutOfStockAlertSettings({
           {runError ? <p className="text-xs text-destructive">{runError}</p> : null}
           {runResult ? <RunResult result={runResult} /> : null}
         </form>
+      ) : null}
+    </div>
+  );
+}
+
+function IgnoreSection({
+  stores,
+  ignored,
+  onToggle,
+}: {
+  stores: Store[];
+  ignored: Record<string, string[]>;
+  onToggle: (key: string, item: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const has = (key: string, item: string) => (ignored[key] ?? []).some((x) => itemKey(x) === itemKey(item));
+  const union = (a: string[], b: string[]) => {
+    const seen = new Set(a.map(itemKey));
+    return [...a, ...b.filter((x) => !seen.has(itemKey(x)) && seen.add(itemKey(x)))];
+  };
+  const allItems = union(
+    ignored[IGNORE_ALL_KEY] ?? [],
+    stores.flatMap((s) => s.items ?? []),
+  ).sort((a, b) => a.localeCompare(b));
+
+  const chip = (key: string, item: string, opts: { lockedByAll?: boolean } = {}) => {
+    const off = opts.lockedByAll || has(key, item);
+    return (
+      <button
+        key={`${key}-${item}`}
+        type="button"
+        disabled={opts.lockedByAll}
+        title={
+          opts.lockedByAll
+            ? "Ignored at all stores — turn it back on in the All stores row"
+            : off
+              ? "Ignored — tap to alert again"
+              : "Tap to leave out of the alert"
+        }
+        onClick={() => onToggle(key, item)}
+        className={cn(
+          "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium transition",
+          off
+            ? "border-border/80 bg-muted text-muted-foreground line-through"
+            : "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15",
+          opts.lockedByAll && "cursor-not-allowed opacity-60",
+        )}
+      >
+        {item}
+        {off && !opts.lockedByAll ? <span className="no-underline text-[10px] font-normal">· ignored</span> : null}
+      </button>
+    );
+  };
+
+  const ignoredCount = Object.values(ignored).reduce((n, l) => n + l.length, 0);
+
+  return (
+    <div className="rounded-lg border border-border/70">
+      {/* Hidden inputs stay mounted while collapsed so Save keeps the list. */}
+      {Object.entries(ignored).flatMap(([key, list]) =>
+        list.map((item) => <input key={`${key}|${item}`} type="hidden" name="ignored_items" value={`${key}|${item}`} />),
+      )}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+      >
+        <span className="text-sm font-medium">Items to leave out of the alert</span>
+        <span
+          className={cn(
+            "rounded-full px-2 py-0.5 text-[10px] font-medium",
+            ignoredCount ? "bg-info/10 text-info" : "bg-muted text-muted-foreground",
+          )}
+        >
+          {ignoredCount ? `${ignoredCount} ignored` : "none"}
+        </span>
+        <ChevronDown className={cn("ml-auto h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+      {open ? (
+        <div className="space-y-2 border-t border-border/70 px-3 py-3">
+          <p className="text-[11px] text-muted-foreground">
+            Tap an item to ignore it (e.g. something a store doesn&apos;t carry). Tap again to alert on it again. Only affects the
+            Sling message — Toast isn&apos;t changed.
+          </p>
+          <div className="divide-y divide-border/60 rounded-lg border border-border/70">
+            <div className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-start">
+              <div className="w-40 shrink-0">
+                <p className="text-sm font-medium">All stores</p>
+                <p className="text-[11px] text-muted-foreground">ignore everywhere</p>
+              </div>
+              <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+                {allItems.length ? (
+                  allItems.map((i) => chip(IGNORE_ALL_KEY, i))
+                ) : (
+                  <span className="text-xs text-muted-foreground">Nothing out of stock</span>
+                )}
+              </div>
+            </div>
+            {stores.map((s) => {
+              const items = union(s.items ?? [], ignored[s.guid] ?? []);
+              return (
+                <div key={s.guid} className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-start">
+                  <div className="w-40 shrink-0">
+                    <p className="text-sm font-medium">{label(s.name)}</p>
+                    <p className="text-[11px] text-muted-foreground">only this store</p>
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+                    {items.length ? (
+                      items.map((i) =>
+                        chip(s.guid, i, {
+                          lockedByAll: has(IGNORE_ALL_KEY, i) && !has(s.guid, i),
+                        }),
+                      )
+                    ) : (
+                      <span className="text-xs text-muted-foreground">{s.error ? "Couldn't read Toast" : "All in stock"}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       ) : null}
     </div>
   );
@@ -361,7 +631,9 @@ function RunResult({ result }: { result: OutOfStockAlertResult }) {
             : "Nothing sent";
   return (
     <div className="space-y-2 rounded-lg border border-border/70 bg-muted/30 p-3">
-      <p className={cn("text-xs font-medium", result.status === "failed" || result.status === "partial" ? "text-destructive" : "")}>
+      <p
+        className={cn("text-xs font-medium", result.status === "failed" || result.status === "partial" ? "text-destructive" : "")}
+      >
         {heading}
         {result.reason ? <span className="font-normal text-muted-foreground"> · {result.reason}</span> : null}
       </p>

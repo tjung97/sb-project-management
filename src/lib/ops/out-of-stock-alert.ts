@@ -10,6 +10,9 @@ import {
   type OutOfStockAlertConfig,
 } from "@/src/lib/ops/out-of-stock-alert-config";
 import { adminDb } from "@/src/lib/firebase/admin";
+import { buildMessages, type AlertStore, type PlannedMessage } from "@/src/lib/ops/out-of-stock-message";
+
+export type { PlannedMessage };
 
 // Daily out-of-stock alert: Toast 86'd items → Sling chats.
 //
@@ -24,14 +27,6 @@ const TZ = process.env.STORE_TIMEZONE ?? "America/Los_Angeles";
 /** How long after the send time a late tick may still send (covers missed ticks). */
 const SEND_WINDOW_MIN = 60;
 
-export interface PlannedMessage {
-  chatId: string;
-  chatName: string;
-  scope: "all" | "store";
-  storeName?: string;
-  content: string;
-}
-
 export interface OutOfStockAlertResult {
   status: "sent" | "partial" | "failed" | "skipped" | "preview";
   reason: string | null;
@@ -41,49 +36,8 @@ export interface OutOfStockAlertResult {
   errors: string[];
 }
 
-export function storeLabel(name: string): string {
-  return name.replace(/^seoul bowl\s+/i, "").trim() || name;
-}
-
-function storeLine(s: ToastStoreStock): string {
-  const label = storeLabel(s.name);
-  if (s.stock.error) return `• ${label}: ⚠️ couldn't read Toast`;
-  const items = s.stock.items.map((i) => i.name);
-  if (!items.length) return `• ${label}: ✅ nothing 86'd`;
-  return `• ${label} (${items.length}): ${items.join(", ")}`;
-}
-
-export function buildMessages(
-  config: OutOfStockAlertConfig,
-  stores: ToastStoreStock[],
-  chatNames: Map<string, string>,
-  now: DateTime
-): PlannedMessage[] {
-  const date = now.toFormat("ccc, LLL d");
-  const sorted = [...stores].sort((a, b) => storeLabel(a.name).localeCompare(storeLabel(b.name)));
-  const total = sorted.reduce((n, s) => n + s.stock.items.length, 0);
-  const name = (id: string) => chatNames.get(id) ?? `Chat ${id}`;
-  const out: PlannedMessage[] = [];
-
-  if (config.allStoresChats.length && (total > 0 || config.sendWhenEmpty)) {
-    const content = [
-      `🚫 Out of stock — ${date} (${total} item${total === 1 ? "" : "s"} across ${sorted.length} stores)`,
-      "",
-      ...sorted.map(storeLine),
-    ].join("\n");
-    for (const chatId of config.allStoresChats) out.push({ chatId, chatName: name(chatId), scope: "all", content });
-  }
-
-  for (const store of sorted) {
-    const chats = config.storeChats[store.guid] ?? [];
-    if (!chats.length) continue;
-    if (!store.stock.items.length && !store.stock.error && !config.sendWhenEmpty) continue;
-    const content = [`🚫 ${storeLabel(store.name)} — out of stock in Toast (${date})`, storeLine(store)].join("\n");
-    for (const chatId of chats) {
-      out.push({ chatId, chatName: name(chatId), scope: "store", storeName: storeLabel(store.name), content });
-    }
-  }
-  return out;
+export function toAlertStores(stores: ToastStoreStock[]): AlertStore[] {
+  return stores.map((s) => ({ guid: s.guid, name: s.name, items: s.stock.items.map((i) => i.name), error: Boolean(s.stock.error) }));
 }
 
 function isDue(config: OutOfStockAlertConfig, now: DateTime): string | null {
@@ -135,7 +89,7 @@ export async function runOutOfStockAlert(
       getAllToastOutOfStock(now.toJSDate()),
       listSlingChats().catch(() => []),
     ]);
-    const messages = buildMessages(config, stores, new Map(chats.map((c) => [c.id, c.name])), now);
+    const messages = buildMessages(config, toAlertStores(stores), new Map(chats.map((c) => [c.id, c.name])), now.toFormat("ccc, LLL d"));
 
     if (options.preview) {
       return { ...base, status: "preview", reason: messages.length ? null : "No chats selected (or nothing to send).", messages };

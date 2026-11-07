@@ -2,8 +2,16 @@ import { PackageX, PackageCheck } from "lucide-react";
 import { Badge } from "@/src/components/ui/badge";
 import { cn } from "@/src/lib/utils";
 import type { ToastStoreStock } from "@/src/lib/toast/api";
+import { isIgnored } from "@/src/lib/ops/out-of-stock-message";
 
-export function ToastOutOfStockPanel({ stores }: { stores: ToastStoreStock[] }) {
+export function ToastOutOfStockPanel({
+  stores,
+  ignored = {},
+}: {
+  stores: ToastStoreStock[];
+  /** Items left out of the Sling alert; shown greyed out here. */
+  ignored?: Record<string, string[]>;
+}) {
   const configured = stores.some((s) => s.stock.configured);
   if (!configured) return null;
 
@@ -30,14 +38,14 @@ export function ToastOutOfStockPanel({ stores }: { stores: ToastStoreStock[] }) 
 
       <div className="divide-y divide-border/60 rounded-lg border border-border/70">
         {stores.map((store) => (
-          <StoreRow key={store.guid} store={store} />
+          <StoreRow key={store.guid} store={store} ignored={ignored} />
         ))}
       </div>
     </div>
   );
 }
 
-function StoreRow({ store }: { store: ToastStoreStock }) {
+function StoreRow({ store, ignored }: { store: ToastStoreStock; ignored: Record<string, string[]> }) {
   const { stock } = store;
   const items = stock.items;
 
@@ -54,14 +62,23 @@ function StoreRow({ store }: { store: ToastStoreStock }) {
           <p className="text-xs text-muted-foreground">Stock unavailable: {stock.error}</p>
         ) : items.length ? (
           <div className="flex flex-wrap gap-1.5">
-            {items.map((item) => (
-              <span
-                key={item.guid}
-                className="inline-flex items-center rounded-md border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive"
-              >
-                {item.name}
-              </span>
-            ))}
+            {items.map((item) => {
+              const off = isIgnored(ignored, store.guid, item.name);
+              return (
+                <span
+                  key={item.guid}
+                  title={off ? "Out of stock in Toast, but left out of the Sling alert" : undefined}
+                  className={cn(
+                    "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
+                    off
+                      ? "border-border/80 bg-muted text-muted-foreground line-through"
+                      : "border-destructive/30 bg-destructive/10 text-destructive"
+                  )}
+                >
+                  {item.name}
+                </span>
+              );
+            })}
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">All in stock</p>

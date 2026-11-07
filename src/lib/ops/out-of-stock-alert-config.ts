@@ -1,6 +1,7 @@
 import "server-only";
 
 import { adminDb } from "@/src/lib/firebase/admin";
+import { DEFAULT_OOS_FOOTER, DEFAULT_OOS_HEADER } from "@/src/lib/ops/out-of-stock-message";
 
 // Firestore-backed settings for the daily Toast out-of-stock → Sling alert,
 // edited from the Operations tab. Off until an admin turns it on and picks chats.
@@ -17,6 +18,12 @@ export interface OutOfStockAlertConfig {
   storeChats: Record<string, string[]>;
   /** Also send when nothing is 86'd ("✅ nothing out of stock"). */
   sendWhenEmpty: boolean;
+  /** First line(s) of each message; supports {date} {count} {stores} {store}. */
+  headerTemplate: string;
+  /** Optional closing line(s), same fill-ins. Empty = none. */
+  footerTemplate: string;
+  /** Store GUID (or "__all__") → item names left out of the alert. */
+  ignoredItems: Record<string, string[]>;
   // Status, written by the runner.
   lastSentDate: string | null;
   lastRunAt: string | null;
@@ -33,6 +40,9 @@ export const DEFAULT_OUT_OF_STOCK_ALERT_CONFIG: OutOfStockAlertConfig = {
   allStoresChats: [],
   storeChats: {},
   sendWhenEmpty: true,
+  headerTemplate: DEFAULT_OOS_HEADER,
+  footerTemplate: DEFAULT_OOS_FOOTER,
+  ignoredItems: {},
   lastSentDate: null,
   lastRunAt: null,
   lastResult: null,
@@ -61,6 +71,13 @@ export function parseOutOfStockAlertConfig(d: Record<string, unknown> | undefine
   const days = Array.isArray(d.days)
     ? d.days.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6)
     : ALL_DAYS;
+  const ignoredItems: Record<string, string[]> = {};
+  if (d.ignored_items && typeof d.ignored_items === "object") {
+    for (const [key, list] of Object.entries(d.ignored_items as Record<string, unknown>)) {
+      const clean = ids(list);
+      if (clean.length) ignoredItems[key] = clean;
+    }
+  }
   return {
     enabled: d.enabled === true,
     sendTime: typeof d.send_time === "string" && /^\d{2}:\d{2}$/.test(d.send_time) ? d.send_time : "07:00",
@@ -68,6 +85,9 @@ export function parseOutOfStockAlertConfig(d: Record<string, unknown> | undefine
     allStoresChats: ids(d.all_stores_chats),
     storeChats,
     sendWhenEmpty: d.send_when_empty !== false,
+    headerTemplate: typeof d.header_template === "string" ? d.header_template : DEFAULT_OOS_HEADER,
+    footerTemplate: typeof d.footer_template === "string" ? d.footer_template : DEFAULT_OOS_FOOTER,
+    ignoredItems,
     lastSentDate: strOrNull(d.last_sent_date),
     lastRunAt: strOrNull(d.last_run_at),
     lastResult: strOrNull(d.last_result),

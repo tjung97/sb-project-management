@@ -30,6 +30,17 @@ export async function updateOutOfStockAlertConfig(formData: FormData) {
     if (!list.includes(chatId)) list.push(chatId);
   }
 
+  // Each ignored item arrives as "<toastGuid or __all__>|<item name>".
+  const ignoredItems: Record<string, string[]> = {};
+  for (const pair of formData.getAll("ignored_items").map(String)) {
+    const cut = pair.indexOf("|");
+    const key = pair.slice(0, cut);
+    const item = pair.slice(cut + 1).trim().slice(0, 200);
+    if (cut < 1 || !item) continue;
+    const list = (ignoredItems[key] ??= []);
+    if (!list.includes(item)) list.push(item);
+  }
+
   await outOfStockAlertRef().set(
     {
       enabled: formData.get("enabled") === "on",
@@ -38,11 +49,14 @@ export async function updateOutOfStockAlertConfig(formData: FormData) {
       all_stores_chats: allStoresChats,
       // Replace (not merge) the map so removed stores are cleared.
       store_chats: storeChats,
+      ignored_items: ignoredItems,
       send_when_empty: formData.get("send_when_empty") === "on",
+      header_template: String(formData.get("header_template") ?? "").slice(0, 300),
+      footer_template: String(formData.get("footer_template") ?? "").slice(0, 500),
       updated_at: FieldValue.serverTimestamp(),
       updated_by_uid: user.uid,
     },
-    { mergeFields: ["enabled", "send_time", "days", "all_stores_chats", "store_chats", "send_when_empty", "updated_at", "updated_by_uid"] }
+    { mergeFields: ["enabled", "send_time", "days", "all_stores_chats", "store_chats", "send_when_empty", "header_template", "footer_template", "ignored_items", "updated_at", "updated_by_uid"] }
   );
   revalidatePath("/operations");
 }
