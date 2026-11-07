@@ -31,7 +31,8 @@ export interface AlertRouting {
 }
 
 /** Key in ignoredItems for items ignored at every store. */
-export const IGNORE_ALL_KEY = "__all__";
+// Not "__all__": Firestore rejects map keys that start and end with "__".
+export const IGNORE_ALL_KEY = "all_stores";
 
 /** Name used to match ignored items: case/spacing-insensitive. */
 export function itemKey(name: string): string {

@@ -78,6 +78,7 @@ export function OutOfStockAlertSettings({
   const [running, startRun] = useTransition();
   const [runResult, setRunResult] = useState<OutOfStockAlertResult | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [enabled, setEnabled] = useState(config.enabled);
   const [days, setDays] = useState<number[]>(config.days);
@@ -139,11 +140,16 @@ export function OutOfStockAlertSettings({
   };
 
   function onSubmit(formData: FormData) {
+    setSaveError(null);
     startSave(async () => {
-      await updateOutOfStockAlertConfig(formData);
-      setDirty(false);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
+      try {
+        await updateOutOfStockAlertConfig(formData);
+        setDirty(false);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      } catch (e) {
+        setSaveError(e instanceof Error ? e.message : String(e));
+      }
     });
   }
 
@@ -411,6 +417,7 @@ export function OutOfStockAlertSettings({
             ) : null}
           </div>
 
+          {saveError ? <p className="text-xs text-destructive">Couldn&apos;t save: {saveError}</p> : null}
           {runError ? <p className="text-xs text-destructive">{runError}</p> : null}
           {runResult ? <RunResult result={runResult} /> : null}
         </form>

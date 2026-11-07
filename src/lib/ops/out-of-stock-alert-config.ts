@@ -22,7 +22,7 @@ export interface OutOfStockAlertConfig {
   headerTemplate: string;
   /** Optional closing line(s), same fill-ins. Empty = none. */
   footerTemplate: string;
-  /** Store GUID (or "__all__") → item names left out of the alert. */
+  /** Store GUID (or "all_stores") → item names left out of the alert. */
   ignoredItems: Record<string, string[]>;
   // Status, written by the runner.
   lastSentDate: string | null;

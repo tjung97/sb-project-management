@@ -30,7 +30,7 @@ export async function updateOutOfStockAlertConfig(formData: FormData) {
     if (!list.includes(chatId)) list.push(chatId);
   }
 
-  // Each ignored item arrives as "<toastGuid or __all__>|<item name>".
+  // Each ignored item arrives as "<toastGuid or all_stores>|<item name>".
   const ignoredItems: Record<string, string[]> = {};
   for (const pair of formData.getAll("ignored_items").map(String)) {
     const cut = pair.indexOf("|");
