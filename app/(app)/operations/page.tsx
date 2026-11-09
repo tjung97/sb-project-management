@@ -6,21 +6,25 @@ import { SlingMonitorBoard } from "@/src/components/sling/SlingMonitorBoard";
 import { ToastOutOfStockPanel } from "@/src/components/toast/ToastOutOfStockPanel";
 import { NoShowSettings } from "@/src/components/ops/NoShowSettings";
 import { OutOfStockAlertSettings } from "@/src/components/ops/OutOfStockAlertSettings";
+import { LaborTargetSettings } from "@/src/components/ops/LaborTargetSettings";
 import { getSlingMonitor, listSlingChats, type SlingChat } from "@/src/lib/sling/api";
-import { getAllToastOutOfStock } from "@/src/lib/toast/api";
+import { getAllToastOutOfStock, getToastLocations } from "@/src/lib/toast/api";
 import { getNoShowConfig } from "@/src/lib/ops/no-show-config";
 import { getOutOfStockAlertConfig } from "@/src/lib/ops/out-of-stock-alert-config";
+import { getLaborTargets } from "@/src/lib/ops/labor-target";
 import { toAlertStores } from "@/src/lib/ops/out-of-stock-alert";
 import { getCurrentUser } from "@/src/lib/firebase/auth-server";
 
 export const dynamic = "force-dynamic";
 
 export default async function OperationsPage() {
-  const [monitor, stock, noShowConfig, oosConfig, user] = await Promise.all([
+  const [monitor, stock, noShowConfig, oosConfig, laborTargets, toastLocations, user] = await Promise.all([
     getSlingMonitor(),
     getAllToastOutOfStock().catch(() => []),
     getNoShowConfig(),
     getOutOfStockAlertConfig(),
+    getLaborTargets(),
+    getToastLocations().catch(() => []),
     getCurrentUser(),
   ]);
   const isAdmin = user?.role === "admin";
@@ -71,6 +75,10 @@ export default async function OperationsPage() {
 
           {isAdmin ? (
             <NoShowSettings config={noShowConfig} storeNames={monitor.stores.map((s) => s.name)} />
+          ) : null}
+
+          {isAdmin && toastLocations.length ? (
+            <LaborTargetSettings targets={laborTargets} stores={toastLocations.map((l) => ({ guid: l.guid, name: l.name }))} />
           ) : null}
 
           {isAdmin ? (

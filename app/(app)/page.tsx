@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { getRecentStockOutages } from "@/src/lib/ops/stock-events";
 import { SalesDashboardServer } from "@/src/components/home/SalesDashboardServer";
+import { StaffingForecastServer } from "@/src/components/home/StaffingForecastServer";
 import { StockAlertBanner } from "@/src/components/home/StockAlertBanner";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,9 @@ export default async function DashboardPage() {
     <>
       <Suspense fallback={<DashboardSkeleton />}>
         <SalesDashboardServer />
+      </Suspense>
+      <Suspense fallback={<div className="h-48 animate-pulse rounded-xl border border-border/80 bg-card" />}>
+        <StaffingForecastServer />
       </Suspense>
       <StockAlertBanner events={stockOutages} />
     </>

@@ -771,6 +771,31 @@ export async function updateNoShowConfig(formData: FormData) {
   revalidatePath("/operations");
 }
 
+export async function updateLaborTargets(formData: FormData) {
+  const user = await currentUserOrThrow();
+  requireAdminRole(user);
+
+  const defPct = Number(formData.get("default_pct"));
+  const perStore: Record<string, number> = {};
+  for (const [key, val] of formData.entries()) {
+    if (!key.startsWith("store_pct_")) continue;
+    const guid = key.slice("store_pct_".length);
+    const n = Number(val);
+    if (Number.isFinite(n) && n > 0) perStore[guid] = Math.round(n * 10) / 10;
+  }
+
+  // Full set (no merge): this doc only holds these fields, so replacing it
+  // wholesale is what lets a cleared override actually drop out of per_store.
+  await adminDb.collection("ops_config").doc("labor_targets").set({
+    default_pct: Number.isFinite(defPct) && defPct > 0 ? Math.round(defPct * 10) / 10 : 25,
+    per_store: perStore,
+    updated_at: FieldValue.serverTimestamp(),
+    updated_by_uid: user.uid,
+  });
+  revalidatePath("/operations");
+  revalidatePath("/");
+}
+
 export async function createProject(formData: FormData) {
   const user = await currentUserOrThrow();
   requireAdminRole(user);
