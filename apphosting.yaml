@@ -49,7 +49,7 @@ env:
 
   # --- Sling / Toast / no-show: non-secret runtime values ---
   - variable: SLING_SOURCES
-    value: "conversation:10157324,conversation:10157243,conversation:16626009,conversation:10157222"
+    value: "conversation:10157324,conversation:10157243,conversation:16626009,conversation:10157222,conversation:18922481"
     availability:
       - RUNTIME
   - variable: STORE_TIMEZONE
