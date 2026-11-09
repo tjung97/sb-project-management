@@ -37,6 +37,8 @@ export interface ChecklistSlot {
 }
 
 export interface SlingShiftView {
+  /** Sling shift (event) id — used to match change-log entries. */
+  id: string;
   day: string; // YYYY-MM-DD (store local)
   weekday: string; // "Mon"
   start: string; // "9:00 AM"
@@ -82,6 +84,7 @@ export interface ScheduleWeek {
 export interface StoreSchedule {
   sourceId: string;
   storeName: string;
+  locationId: string | null;
   locationName: string | null;
   thisWeek: ScheduleWeek;
   nextWeek: ScheduleWeek;
@@ -380,6 +383,7 @@ function groupShifts(events: unknown[], snapshot: SlingSnapshot, timezone: strin
     const endMin = end.min <= start.min ? end.min + 1440 : end.min; // overnight
     const key = String(locId);
     (byLoc[key] ??= []).push({
+      id: String(record.id ?? ""),
       day: start.ymd,
       weekday: start.weekday,
       start: start.time,
@@ -501,6 +505,7 @@ export async function getSlingScheduleBoard(options: { force?: boolean; now?: Da
     return {
       sourceId: source.id,
       storeName: source.name,
+      locationId: locId,
       locationName: locId ? snapshot.locations[locId] : null,
       thisWeek,
       nextWeek,
@@ -522,6 +527,49 @@ export async function getSlingScheduleBoard(options: { force?: boolean; now?: Da
 /** Bust the snapshot cache (used by the Refresh action). */
 export function clearSlingCache(): void {
   snapshotCache = null;
+  for (const clear of extraCacheClearers) clear();
+}
+
+const extraCacheClearers: Array<() => void> = [];
+/** Let other Sling modules (e.g. the change log) clear their caches on Refresh. */
+export function onSlingCacheClear(clear: () => void): void {
+  if (!extraCacheClearers.includes(clear)) extraCacheClearers.push(clear);
+}
+
+// ---- Schedule context — used by the schedule change log (activity.ts) -------
+
+export interface SlingScheduleContext {
+  timezone: string;
+  users: Record<string, string>;
+  positions: Record<string, string>;
+  locations: Record<string, string>;
+  /** Our stores and the Sling location each one maps to. */
+  stores: Array<{ sourceId: string; storeName: string; locationId: string | null }>;
+}
+
+/** Name maps + store→location mapping from the cached snapshot. Null if Sling isn't configured. */
+export async function getSlingScheduleContext(): Promise<SlingScheduleContext | null> {
+  const config = getSlingConfig();
+  if (!config) return null;
+  const snapshot = await loadSnapshot(config, false, new Date());
+  return {
+    timezone: snapshot.timezone,
+    users: snapshot.users,
+    positions: snapshot.positions,
+    locations: snapshot.locations,
+    stores: snapshot.sources.map((s) => ({
+      sourceId: s.id,
+      storeName: s.name,
+      locationId: resolveLocationId(s.name, snapshot.locations),
+    })),
+  };
+}
+
+/** Authenticated GET against the Sling API (throws on 401 / non-2xx). */
+export async function slingApiGet(path: string, query: Record<string, string> = {}): Promise<unknown> {
+  const config = getSlingConfig();
+  if (!config) throw new Error("Sling isn't configured (SLING_TOKEN / SLING_SOURCES).");
+  return slingGet(config, path, query);
 }
 
 // ---- Conversations (list + post) — used by the out-of-stock alert ----------
@@ -698,7 +746,7 @@ function toMessageView(item: unknown): SlingMessageView {
   };
 }
 
-function shiftStatus(value: unknown): ShiftStatus {
+export function shiftStatus(value: unknown): ShiftStatus {
   if (value === "published") return "published";
   if (value === "planning") return "planning";
   return "other";
@@ -751,7 +799,7 @@ function localYmd(d: Date, tz: string): string {
   return localParts(d, tz).ymd;
 }
 
-function tzParts(iso: string, tz: string): { ymd: string; weekday: string; time: string; min: number } {
+export function tzParts(iso: string, tz: string): { ymd: string; weekday: string; time: string; min: number } {
   const d = new Date(iso);
   const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
   const weekday = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(d);
@@ -771,13 +819,12 @@ function formatMinLabel(min: number): string {
   return m ? `${hour}:${String(m).padStart(2, "0")}${suffix}` : `${hour}${suffix}`;
 }
 
-function userName(record: Record<string, unknown>): string | null {
-  return (
-    str(record.preferredName) ||
-    [str(record.name), str(record.lastname)].filter(Boolean).join(" ").trim() ||
-    str(record.legalName) ||
-    null
-  );
+export function userName(record: Record<string, unknown>): string | null {
+  const first = str(record.name)?.trim() ?? "";
+  const last = str(record.lastname)?.trim() ?? "";
+  // Some profiles already include the last name in `name` ("Maksim Maksimov" + "Maksimov").
+  const full = first && last && first.toLowerCase().endsWith(last.toLowerCase()) ? first : [first, last].filter(Boolean).join(" ");
+  return str(record.preferredName) || full || str(record.legalName) || null;
 }
 
 function extractItems(payload: unknown): unknown[] {
@@ -789,11 +836,11 @@ function extractItems(payload: unknown): unknown[] {
   return [];
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
+export function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
-function str(value: unknown): string | null {
+export function str(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
