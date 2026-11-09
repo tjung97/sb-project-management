@@ -2,7 +2,9 @@
 // server imports, so the Operations panel can render a live preview with the
 // exact same code the cron runner uses to send.
 
-export const DEFAULT_OOS_HEADER = "🚫 Out of stock — {date}";
+export const DEFAULT_OOS_TITLE = "Out of stock alert bot";
+export const DEFAULT_OOS_HEADER = "Out of stock — {date}";
+export const EVERYTHING_IN_STOCK = "Everything in stock";
 export const DEFAULT_OOS_FOOTER = "";
 
 /** Fill-ins admins can use in the header/footer. */
@@ -24,6 +26,8 @@ export interface AlertRouting {
   allStoresChats: string[];
   storeChats: Record<string, string[]>;
   sendWhenEmpty: boolean;
+  /** Bold first line of every message. Empty = no title. */
+  titleTemplate: string;
   headerTemplate: string;
   footerTemplate: string;
   /** Items left out of the alert: store GUID (or IGNORE_ALL_KEY) → item names. */
@@ -63,7 +67,7 @@ export function storeLabel(name: string): string {
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-function fill(template: string, vars: { date: string; count: number; stores: number; store: string }): string {
+function fill(template: string, vars: Vars): string {
   return template
     .replaceAll("{date}", vars.date)
     .replaceAll("{count}", String(vars.count))
@@ -72,10 +76,31 @@ function fill(template: string, vars: { date: string; count: number; stores: num
     .trim();
 }
 
+// Sling chat is plain text (no markdown), so "bold" uses Unicode Mathematical
+// Sans-Serif Bold letters, which render bold in every Sling app.
+export function toBold(text: string): string {
+  return [...text]
+    .map((ch) => {
+      const c = ch.codePointAt(0)!;
+      if (c >= 65 && c <= 90) return String.fromCodePoint(0x1d5d4 + c - 65);
+      if (c >= 97 && c <= 122) return String.fromCodePoint(0x1d5ee + c - 97);
+      if (c >= 48 && c <= 57) return String.fromCodePoint(0x1d7ec + c - 48);
+      return ch;
+    })
+    .join("");
+}
+
+type Templates = Pick<AlertRouting, "headerTemplate" | "footerTemplate"> & { titleTemplate?: string };
+type Vars = { date: string; count: number; stores: number; store: string };
+
+function title(routing: Templates, vars: Vars): string {
+  return toBold(fill(routing.titleTemplate ?? DEFAULT_OOS_TITLE, vars));
+}
+
 function storeSection(s: AlertStore): string {
   const label = storeLabel(s.name);
-  if (s.error) return `${label} — ⚠️ couldn't read Toast`;
-  if (!s.items.length) return `${label} — ✅ all in stock`;
+  if (s.error) return `${label} — couldn't read Toast`;
+  if (!s.items.length) return `${label} — all in stock`;
   return [`${label} (${s.items.length})`, ...s.items.map((i) => `• ${i}`)].join("\n");
 }
 
@@ -84,20 +109,31 @@ function compose(parts: (string | null | undefined)[]): string {
 }
 
 /** One combined message covering every store. */
-export function formatAllStoresMessage(stores: AlertStore[], routing: Pick<AlertRouting, "headerTemplate" | "footerTemplate">, date: string): string {
+export function formatAllStoresMessage(stores: AlertStore[], routing: Templates, date: string): string {
   const sorted = sortStores(stores);
   const count = sorted.reduce((n, s) => n + s.items.length, 0);
   const vars = { date, count, stores: sorted.length, store: "All stores" };
+  // Nothing out (after ignores) and Toast read fine everywhere → short message.
+  if (count === 0 && !sorted.some((s) => s.error)) return [title(routing, vars), EVERYTHING_IN_STOCK].filter(Boolean).join("\n");
   const header = fill(routing.headerTemplate, vars);
   const summary = `${plural(count, "item")} across ${plural(sorted.length, "store")}`;
-  return compose([[header, summary].filter(Boolean).join("\n"), ...sorted.map(storeSection), fill(routing.footerTemplate, vars)]);
+  return compose([
+    [title(routing, vars), header, summary].filter(Boolean).join("\n"),
+    ...sorted.map(storeSection),
+    fill(routing.footerTemplate, vars),
+  ]);
 }
 
 /** One store's own list. */
-export function formatStoreMessage(store: AlertStore, routing: Pick<AlertRouting, "headerTemplate" | "footerTemplate">, date: string): string {
+export function formatStoreMessage(store: AlertStore, routing: Templates, date: string): string {
   [store] = sortStores([store]);
   const vars = { date, count: store.items.length, stores: 1, store: storeLabel(store.name) };
-  return compose([fill(routing.headerTemplate, vars), storeSection(store), fill(routing.footerTemplate, vars)]);
+  if (!store.items.length && !store.error) return [title(routing, vars), EVERYTHING_IN_STOCK].filter(Boolean).join("\n");
+  return compose([
+    [title(routing, vars), fill(routing.headerTemplate, vars)].filter(Boolean).join("\n"),
+    storeSection(store),
+    fill(routing.footerTemplate, vars),
+  ]);
 }
 
 function sortStores(stores: AlertStore[]): AlertStore[] {

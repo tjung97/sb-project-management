@@ -1,7 +1,7 @@
 import "server-only";
 
 import { adminDb } from "@/src/lib/firebase/admin";
-import { DEFAULT_OOS_FOOTER, DEFAULT_OOS_HEADER } from "@/src/lib/ops/out-of-stock-message";
+import { DEFAULT_OOS_FOOTER, DEFAULT_OOS_HEADER, DEFAULT_OOS_TITLE } from "@/src/lib/ops/out-of-stock-message";
 
 // Firestore-backed settings for the daily Toast out-of-stock → Sling alert,
 // edited from the Operations tab. Off until an admin turns it on and picks chats.
@@ -18,6 +18,8 @@ export interface OutOfStockAlertConfig {
   storeChats: Record<string, string[]>;
   /** Also send when nothing is 86'd ("✅ nothing out of stock"). */
   sendWhenEmpty: boolean;
+  /** Bold first line of each message (bot name). Empty = none. */
+  titleTemplate: string;
   /** First line(s) of each message; supports {date} {count} {stores} {store}. */
   headerTemplate: string;
   /** Optional closing line(s), same fill-ins. Empty = none. */
@@ -40,6 +42,7 @@ export const DEFAULT_OUT_OF_STOCK_ALERT_CONFIG: OutOfStockAlertConfig = {
   allStoresChats: [],
   storeChats: {},
   sendWhenEmpty: true,
+  titleTemplate: DEFAULT_OOS_TITLE,
   headerTemplate: DEFAULT_OOS_HEADER,
   footerTemplate: DEFAULT_OOS_FOOTER,
   ignoredItems: {},
@@ -85,6 +88,7 @@ export function parseOutOfStockAlertConfig(d: Record<string, unknown> | undefine
     allStoresChats: ids(d.all_stores_chats),
     storeChats,
     sendWhenEmpty: d.send_when_empty !== false,
+    titleTemplate: typeof d.title_template === "string" ? d.title_template : DEFAULT_OOS_TITLE,
     headerTemplate: typeof d.header_template === "string" ? d.header_template : DEFAULT_OOS_HEADER,
     footerTemplate: typeof d.footer_template === "string" ? d.footer_template : DEFAULT_OOS_FOOTER,
     ignoredItems,

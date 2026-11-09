@@ -12,6 +12,7 @@ import type { OutOfStockAlertConfig } from "@/src/lib/ops/out-of-stock-alert-con
 import type { OutOfStockAlertResult } from "@/src/lib/ops/out-of-stock-alert";
 import {
   DEFAULT_OOS_HEADER,
+  DEFAULT_OOS_TITLE,
   IGNORE_ALL_KEY,
   OOS_PLACEHOLDERS,
   applyIgnores,
@@ -83,6 +84,7 @@ export function OutOfStockAlertSettings({
   const [enabled, setEnabled] = useState(config.enabled);
   const [days, setDays] = useState<number[]>(config.days);
   const [sendWhenEmpty, setSendWhenEmpty] = useState(config.sendWhenEmpty);
+  const [titleText, setTitleText] = useState(config.titleTemplate);
   const [header, setHeader] = useState(config.headerTemplate);
   const [footer, setFooter] = useState(config.footerTemplate);
   const [ignored, setIgnored] = useState<Record<string, string[]>>(config.ignoredItems);
@@ -113,6 +115,7 @@ export function OutOfStockAlertSettings({
       allStoresChats: routes[ALL_KEY] ?? [],
       storeChats: Object.fromEntries(Object.entries(routes).filter(([k]) => k !== ALL_KEY)),
       sendWhenEmpty,
+      titleTemplate: titleText,
       headerTemplate: header,
       footerTemplate: footer,
       ignoredItems: ignored,
@@ -128,7 +131,7 @@ export function OutOfStockAlertSettings({
         content: formatAllStoresMessage(applyIgnores(stores, ignored), routing, date),
       },
     ];
-  }, [routes, sendWhenEmpty, header, footer, ignored, stores, chats]);
+  }, [routes, sendWhenEmpty, titleText, header, footer, ignored, stores, chats]);
 
   const touch = () => {
     setDirty(true);
@@ -266,6 +269,16 @@ export function OutOfStockAlertSettings({
                 </p>
               </div>
               <label className="block space-y-1">
+                <span className="text-xs text-muted-foreground">Title (shown in bold)</span>
+                <input
+                  name="title_template"
+                  value={titleText}
+                  onChange={(e) => setTitleText(e.target.value)}
+                  placeholder={DEFAULT_OOS_TITLE}
+                  className="h-8 w-full rounded-lg border border-border/80 bg-background px-2 text-sm font-semibold outline-none focus:border-info/60"
+                />
+              </label>
+              <label className="block space-y-1">
                 <span className="text-xs text-muted-foreground">Header</span>
                 <input
                   name="header_template"
@@ -303,10 +316,11 @@ export function OutOfStockAlertSettings({
                 ))}
                 <span className="text-[11px] text-muted-foreground">tap to add to header · hover for meaning</span>
               </div>
-              {header !== DEFAULT_OOS_HEADER || footer ? (
+              {titleText !== DEFAULT_OOS_TITLE || header !== DEFAULT_OOS_HEADER || footer ? (
                 <button
                   type="button"
                   onClick={() => {
+                    setTitleText(DEFAULT_OOS_TITLE);
                     setHeader(DEFAULT_OOS_HEADER);
                     setFooter("");
                     touch();

@@ -51,12 +51,13 @@ export async function updateOutOfStockAlertConfig(formData: FormData) {
       store_chats: storeChats,
       ignored_items: ignoredItems,
       send_when_empty: formData.get("send_when_empty") === "on",
+      title_template: String(formData.get("title_template") ?? "").slice(0, 120),
       header_template: String(formData.get("header_template") ?? "").slice(0, 300),
       footer_template: String(formData.get("footer_template") ?? "").slice(0, 500),
       updated_at: FieldValue.serverTimestamp(),
       updated_by_uid: user.uid,
     },
-    { mergeFields: ["enabled", "send_time", "days", "all_stores_chats", "store_chats", "send_when_empty", "header_template", "footer_template", "ignored_items", "updated_at", "updated_by_uid"] }
+    { mergeFields: ["enabled", "send_time", "days", "all_stores_chats", "store_chats", "send_when_empty", "title_template", "header_template", "footer_template", "ignored_items", "updated_at", "updated_by_uid"] }
   );
   revalidatePath("/operations");
 }
