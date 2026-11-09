@@ -235,6 +235,40 @@ export const noShowCheck = onSchedule(
   }
 );
 
+// Precomputes the sales forecast (projection + YoY baseline) for every store,
+// weekly on Monday morning. Fans out one request per store so each stays within
+// the route's time budget; the dashboard reads the cached Firestore result.
+export const salesForecastJob = onSchedule(
+  {
+    schedule: "30 4 * * 1",
+    timeZone: "America/Los_Angeles",
+    region: "us-west1",
+    timeoutSeconds: 540,
+    memory: "512MiB",
+  },
+  async () => {
+    const secret = process.env.CRON_SECRET;
+    const base = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL;
+    if (!secret || !base) {
+      logger.warn("salesForecastJob: APP_URL or CRON_SECRET not set; skipping.");
+      return;
+    }
+    const k = encodeURIComponent(secret);
+    try {
+      const listRes = await fetch(`${base}/api/cron/forecast?list=1&key=${k}`);
+      const list = (await listRes.json().catch(() => ({}))) as { stores?: Array<{ guid: string; name: string }> };
+      const stores = list.stores ?? [];
+      const results = await Promise.allSettled(
+        stores.map((s) => fetch(`${base}/api/cron/forecast?store=${encodeURIComponent(s.guid)}&key=${k}`))
+      );
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      logger.info("salesForecastJob ran", { stores: stores.length, ok });
+    } catch (err) {
+      logger.error("salesForecastJob failed", { error: (err as Error).message });
+    }
+  }
+);
+
 // Ticks the out-of-stock → Sling alert every 15 min. The app route reads the
 // send time/days/chats from Firestore (Operations tab) and only sends once per
 // day at the configured time, so changing the time needs no redeploy.

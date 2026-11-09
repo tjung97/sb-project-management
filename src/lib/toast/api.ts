@@ -187,6 +187,69 @@ export async function getAllToastOpsSummaries(now = new Date()): Promise<ToastSt
   return data;
 }
 
+// --- Weekly sales (for the forecast engine) ---------------------------------
+
+export interface ToastDaySales {
+  /** Sum of check amounts per hour, index 0..23 (store-local). */
+  hours: number[];
+  total: number;
+}
+
+export interface ToastWeekSales {
+  mondayYmd: string;
+  /** index 0 = Monday … 6 = Sunday. */
+  byWeekday: ToastDaySales[];
+  total: number;
+  orderCount: number;
+}
+
+const WEEK_SALES_TTL_MS = 30 * 60 * 1000;
+const weekSalesCache = new Map<string, { at: number; data: ToastWeekSales }>();
+
+// Aggregates one Mon–Sun week of Toast orders into per-weekday hourly
+// check-amount totals (the "sales" convention used by labor_cost.py /
+// sales_prediction.py). Heavy (paginated order fetch) — cached 30 min.
+export async function getToastWeekSales(restaurantGuid: string, mondayYmd: string): Promise<ToastWeekSales | null> {
+  const base = getToastBaseConfig();
+  if (!base) return null;
+  const zone = base.timezone;
+  const monday = DateTime.fromISO(mondayYmd, { zone }).startOf("day");
+  if (!monday.isValid) return null;
+
+  const cacheKey = `${restaurantGuid}:${mondayYmd}`;
+  const cached = weekSalesCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < WEEK_SALES_TTL_MS) return cached.data;
+
+  const config = configForLocation(base, restaurantGuid);
+  const token = await getToastToken(config);
+  const orders = await toastGetOrdersRange(config, token, monday, monday.plus({ days: 7 }));
+
+  const byWeekday: ToastDaySales[] = Array.from({ length: 7 }, () => ({ hours: new Array(24).fill(0), total: 0 }));
+  let total = 0;
+  for (const order of orders) {
+    const o = asRecord(order);
+    if (o.voided === true || o.deleted === true) continue;
+    const opened = dateValue(o.openedDate ?? o.createdDate ?? o.modifiedDate);
+    if (!opened) continue;
+    const local = DateTime.fromJSDate(opened, { zone });
+    const wd = local.weekday - 1; // luxon: 1=Mon … 7=Sun
+    if (wd < 0 || wd > 6) continue;
+    let amt = 0;
+    for (const check of arrayValue(o.checks)) {
+      const c = asRecord(check);
+      if (c.voided === true || c.deleted === true) continue;
+      amt += numberValue(c.amount);
+    }
+    if (amt <= 0) continue;
+    byWeekday[wd].hours[local.hour] += amt;
+    byWeekday[wd].total += amt;
+    total += amt;
+  }
+  const result: ToastWeekSales = { mondayYmd, byWeekday, total, orderCount: orders.length };
+  weekSalesCache.set(cacheKey, { at: Date.now(), data: result });
+  return result;
+}
+
 // --- 3-month per-item sales history -----------------------------------------
 
 interface SalesHistoryIndex {
