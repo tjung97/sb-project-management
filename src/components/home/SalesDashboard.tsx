@@ -1,5 +1,6 @@
 import { TrendingUp, TrendingDown, DollarSign, CalendarRange, Users, Minus, Info } from "lucide-react";
 import { cn } from "@/src/lib/utils";
+import { HourlyChart, WeekChart, Sparkline, type HourlyData, type WeekDayBar } from "@/src/components/home/SalesVisuals";
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
@@ -17,6 +18,7 @@ export interface StoreSalesRow {
   laborTargetPct: number;
   notes: string[];
   computedAt: string | null;
+  sparkline: number[]; // today's actual sales by hour (business range)
 }
 
 export interface SalesDashboardData {
@@ -35,6 +37,8 @@ export interface SalesDashboardData {
     yoyPct: number | null;
     pacePct: number | null;
   };
+  hourly: HourlyData | null;
+  week: { days: WeekDayBar[]; todayIndex: number } | null;
   stores: StoreSalesRow[];
 }
 
@@ -94,17 +98,34 @@ export function SalesDashboard({ data }: { data: SalesDashboardData }) {
         <Kpi label="Week to date" value={money.format(c.wtdSales)} icon={<DollarSign className="h-4 w-4" />} />
       </div>
 
+      {/* Charts */}
+      {(data.hourly || data.week) && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {data.hourly && (
+            <section className="dash-rise rounded-xl border border-border/80 bg-card p-4">
+              <HourlyChart data={data.hourly} />
+            </section>
+          )}
+          {data.week && (
+            <section className="dash-rise rounded-xl border border-border/80 bg-card p-4">
+              <WeekChart days={data.week.days} todayIndex={data.week.todayIndex} />
+            </section>
+          )}
+        </div>
+      )}
+
       {/* Per-store table */}
       <section className="dash-rise overflow-hidden rounded-xl border border-border/80 bg-card">
         <div className="border-b border-border/70 bg-muted/30 px-4 py-2.5">
           <h2 className="text-sm font-semibold">By store</h2>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] text-sm">
+          <table className="w-full min-w-[900px] text-sm">
             <thead>
               <tr className="border-b border-border/70 text-left text-[11px] font-medium text-muted-foreground">
                 <Th className="pl-4">Store</Th>
                 <Th align="right">Today</Th>
+                <Th>Hourly</Th>
                 <Th align="right">Week to date</Th>
                 <Th align="right">Pace</Th>
                 <Th align="right">This wk proj.</Th>
@@ -118,6 +139,7 @@ export function SalesDashboard({ data }: { data: SalesDashboardData }) {
                 <tr key={s.guid} className="border-b border-border/50 last:border-b-0 hover:bg-accent/20">
                   <td className="py-2.5 pl-4 font-medium">{shortName(s.name)}</td>
                   <Td align="right">{money.format(s.todaySales)}</Td>
+                  <td className="px-2 py-2.5"><Sparkline values={s.sparkline} /></td>
                   <Td align="right">{money.format(s.wtdSales)}</Td>
                   <Td align="right">
                     <span className={cn("tabular-nums", toneClass(paceTone(s.pacePct)))}>

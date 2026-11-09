@@ -1,7 +1,7 @@
 import { DateTime } from "luxon";
 import { getCurrentUser } from "@/src/lib/firebase/auth-server";
 import { getAllToastOpsSummaries, getToastLocations, getToastWeekSales } from "@/src/lib/toast/api";
-import { getAllForecasts, type StoreForecast } from "@/src/lib/toast/forecast";
+import { getAllForecasts, WEEKDAYS, type StoreForecast } from "@/src/lib/toast/forecast";
 import { getLaborTargets, targetFor } from "@/src/lib/ops/labor-target";
 import { SalesDashboard, type SalesDashboardData, type StoreSalesRow } from "@/src/components/home/SalesDashboard";
 
@@ -32,6 +32,32 @@ export async function SalesDashboardServer() {
   const summaryByGuid = new Map(summaries.map((s) => [s.guid, s.summary]));
 
   const sumDays = (vals: number[], upto: number) => vals.slice(0, upto).reduce((a, b) => a + b, 0);
+
+  // ── Combined hourly curves (today): actual so far vs projected ──
+  const combinedActualHour = new Array(24).fill(0);
+  const combinedProjHour = new Array(24).fill(0);
+  for (const loc of locations) {
+    const todayActual = weekByGuid[loc.guid]?.byWeekday[todayWd]?.hours;
+    const todayProj = forecasts[loc.guid]?.thisWeek.days[todayWd]?.hours;
+    for (let h = 0; h < 24; h++) {
+      combinedActualHour[h] += todayActual?.[h] ?? 0;
+      combinedProjHour[h] += todayProj?.[h] ?? 0;
+    }
+  }
+  // Business window = hours where either curve has sales (fallback 10a–9p).
+  let startHour = 24;
+  let endHour = 0;
+  for (let h = 0; h < 24; h++) {
+    if ((combinedActualHour[h] ?? 0) > 0 || (combinedProjHour[h] ?? 0) > 0) {
+      startHour = Math.min(startHour, h);
+      endHour = Math.max(endHour, h);
+    }
+  }
+  if (startHour > endHour) {
+    startHour = 10;
+    endHour = 21;
+  }
+  const nowHour = base.hour + base.minute / 60;
 
   const stores: StoreSalesRow[] = locations.map((loc) => {
     const week = weekByGuid[loc.guid];
@@ -65,6 +91,7 @@ export async function SalesDashboardServer() {
       laborTargetPct: targetFor(targets, loc.guid),
       notes: fc?.thisWeek.days.map((d) => d.note) ?? [],
       computedAt: fc?.computedAt ?? null,
+      sparkline: (week?.byWeekday[todayWd]?.hours ?? new Array(24).fill(0)).slice(startHour, endHour + 1),
     };
   });
 
@@ -93,6 +120,21 @@ export async function SalesDashboardServer() {
   }, 0);
 
   const anyForecast = Object.keys(forecasts).length > 0;
+
+  // ── Weekly projected vs actual vs last-year (combined) ──
+  const weekDays = WEEKDAYS.map((weekday, d) => {
+    let projected = 0;
+    let lastYear = 0;
+    let actual = 0;
+    for (const loc of locations) {
+      const fc = forecasts[loc.guid];
+      projected += fc?.thisWeek.days[d]?.total ?? 0;
+      lastYear += fc?.lastYearThisWeek.days[d]?.total ?? 0;
+      actual += weekByGuid[loc.guid]?.byWeekday[d]?.total ?? 0;
+    }
+    return { weekday, projected, lastYear, actual: d <= todayWd ? Math.round(actual) : null };
+  });
+
   const data: SalesDashboardData = {
     greeting: greeting(base.hour),
     userName: firstName(user?.name ?? user?.email ?? ""),
@@ -109,6 +151,8 @@ export async function SalesDashboardServer() {
       yoyPct: combinedLYCompleted > 0 ? ((combinedWtdForYoY - combinedLYCompleted) / combinedLYCompleted) * 100 : null,
       pacePct: combinedProjCompleted > 0 ? (combinedWtdCompleted / combinedProjCompleted) * 100 : null,
     },
+    hourly: { startHour, endHour, actual: combinedActualHour, projected: combinedProjHour, nowHour },
+    week: { days: weekDays, todayIndex: todayWd },
     stores,
   };
 
