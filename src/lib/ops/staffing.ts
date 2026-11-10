@@ -93,15 +93,21 @@ export async function getStaffingVsForecast(now = new Date()): Promise<StaffingF
   const schedByToken = new Map<string, StoreSchedule>();
   for (const s of board.stores) schedByToken.set(norm(s.storeName), s);
 
+  // Canonical store set = Toast locations ∪ forecast stores, so a store never
+  // drops out just because getToastLocations returned a partial/cached list or
+  // a forecast hasn't been computed. A store with missing data still gets a row.
+  const storeList = new Map<string, { guid: string; name: string }>();
+  for (const loc of locations) storeList.set(loc.guid, { guid: loc.guid, name: loc.name });
+  for (const [guid, f] of Object.entries(forecasts)) if (!storeList.has(guid)) storeList.set(guid, { guid, name: f.storeName || guid });
+
   const stores: StoreStaffing[] = [];
-  for (const loc of locations) {
-    const fc = forecasts[loc.guid];
-    if (!fc) continue;
+  for (const loc of storeList.values()) {
+    const fc: StoreForecast | null = forecasts[loc.guid] ?? null;
     const sched = matchSchedule(loc.name, schedByToken);
     const sm = modelForStore(model, loc.guid);
 
     // Derive store hours from the forecast envelope unless overridden.
-    const derived = deriveHours(fc);
+    const derived = fc ? deriveHours(fc) : { openMin: 11 * 60, closeMin: 21 * 60 };
     const openMin = sm.openMin ?? derived.openMin;
     const closeMin = sm.closeMin ?? derived.closeMin;
     const avgWage = sm.avgWage ?? wageByGuid.get(loc.guid) ?? WAGE_FALLBACK;
@@ -123,7 +129,7 @@ export async function getStaffingVsForecast(now = new Date()): Promise<StaffingF
       const ymd = date.toISODate() ?? "";
       const wd = date.weekday - 1;
       const inThisWeek = date >= thisMon && date < nextMon;
-      const fcDay = inThisWeek ? fc.thisWeek.days[wd] : fc.nextWeek.days[wd];
+      const fcDay = fc ? (inThisWeek ? fc.thisWeek.days[wd] : fc.nextWeek.days[wd]) : undefined;
       const forecastHour = fcDay?.hours ?? new Array(24).fill(0);
       const hasForecast = forecastHour.some((v) => v > 0);
 
