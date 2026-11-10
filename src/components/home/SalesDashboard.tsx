@@ -1,6 +1,7 @@
-import { TrendingUp, TrendingDown, DollarSign, CalendarRange, Users, Minus, Info, Target, AlertTriangle, CheckCircle2, Activity } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Info, AlertTriangle, CheckCircle2, Activity } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { HourlyChart, WeekChart, Sparkline, type HourlyData, type WeekDayBar } from "@/src/components/home/SalesVisuals";
+import { StorePulseGrid, type StoreCard } from "@/src/components/home/StorePulseGrid";
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
@@ -52,6 +53,15 @@ export interface SalesDashboardData {
   hourly: HourlyData | null;
   week: { days: WeekDayBar[]; todayIndex: number } | null;
   watchlist: Array<{ guid: string; name: string; issues: string[] }>;
+  cards: StoreCard[];
+  company: {
+    netToday: number;
+    paceDelta: number | null;
+    projFinish: number | null;
+    projEodLaborPct: number | null;
+    laborTargetPct: number;
+    needAttention: number;
+  };
   stores: StoreSalesRow[];
 }
 
@@ -68,87 +78,41 @@ export function SalesDashboard({ data }: { data: SalesDashboardData }) {
 
   return (
     <div className="space-y-6">
-      <section className="dash-hero dash-rise rounded-2xl border border-border/70 p-5 sm:p-6">
-        <p className="text-xs font-medium text-muted-foreground">{data.dateLabel}</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
-          {data.greeting}
-          {data.userName ? `, ${data.userName}` : ""}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          All stores · {money.format(c.todaySales)} today
-          {c.intradayPacePct != null ? (
-            <>
-              {" · "}
-              <span className={toneClass(paceTone(c.intradayPacePct))}>{paceLabel(c.intradayPacePct)}</span>
-            </>
-          ) : null}
-          {c.projFinishToday != null ? ` · on track for ~${money.format(c.projFinishToday)}` : ""}
-        </p>
+      {/* Slim company bar */}
+      <section className="dash-rise rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">{data.dateLabel}</p>
+            <h1 className="mt-0.5 text-lg font-semibold tracking-tight sm:text-xl">
+              {data.greeting}
+              {data.userName ? `, ${data.userName}` : ""}
+            </h1>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <CompanyStat label="Net sales today" value={money.format(c.todaySales)} />
+            <CompanyStat
+              label="vs plan"
+              value={data.company.paceDelta != null ? pct(data.company.paceDelta) : "—"}
+              tone={paceTone(c.intradayPacePct)}
+            />
+            <CompanyStat
+              label="Proj. EOD labor"
+              value={data.company.projEodLaborPct != null ? `${data.company.projEodLaborPct.toFixed(1)}%` : "—"}
+              tone={laborTone(data.company.projEodLaborPct, data.company.laborTargetPct)}
+              sub={`target ${data.company.laborTargetPct}%`}
+            />
+            <CompanyStat
+              label="Need attention"
+              value={String(data.company.needAttention)}
+              tone={data.company.needAttention > 0 ? "warning" : "success"}
+            />
+          </div>
+        </div>
         <DataHealthChip health={data.dataHealth} />
       </section>
 
-      {/* Needs attention today */}
-      {data.watchlist.length > 0 ? (
-        <section className="dash-rise rounded-xl border border-warning/40 bg-warning/5 p-3">
-          <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-warning-foreground">
-            <AlertTriangle className="h-4 w-4" /> Needs attention today
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {data.watchlist.map((w) => (
-              <div key={w.guid} className="flex items-center gap-1.5 rounded-lg border border-warning/30 bg-card px-2.5 py-1.5 text-xs">
-                <span className="font-medium">{shortName(w.name)}</span>
-                <span className="text-muted-foreground">·</span>
-                <span className="text-warning-foreground">{w.issues.join(" · ")}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : data.anyForecast ? (
-        <section className="dash-rise flex items-center gap-2 rounded-xl border border-success/30 bg-success/5 px-3 py-2 text-xs text-success">
-          <CheckCircle2 className="h-4 w-4" /> All stores tracking to plan.
-        </section>
-      ) : null}
-
-      {/* Combined KPIs — today-first */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-        <Kpi label="Today's sales" value={money.format(c.todaySales)} sub={`of ${c.projDayToday != null ? money.format(c.projDayToday) : "—"} forecast`} icon={<DollarSign className="h-4 w-4" />} />
-        <Kpi
-          label="vs plan (today)"
-          value={c.intradayPacePct != null ? pct(c.intradayPacePct - 100) : "—"}
-          valueTone={paceTone(c.intradayPacePct)}
-          sub={c.intradayPacePct != null ? "vs forecast by now" : "forecast pending"}
-          icon={c.intradayPacePct != null && c.intradayPacePct < 100 ? <TrendingDown className="h-4 w-4" /> : <TrendingUp className="h-4 w-4" />}
-        />
-        <Kpi
-          label="On track for"
-          value={c.projFinishToday != null ? money.format(c.projFinishToday) : "—"}
-          sub="projected finish today"
-          icon={<Target className="h-4 w-4" />}
-        />
-        <Kpi
-          label="Labor % (today)"
-          value={c.laborPct != null ? `${c.laborPct.toFixed(1)}%` : "—"}
-          valueTone={laborTone(c.laborPct, c.laborTargetPct)}
-          sub={`target ${c.laborTargetPct}% · so far`}
-          icon={<Users className="h-4 w-4" />}
-        />
-        <Kpi
-          label="Projected this week"
-          value={c.projThisWeek != null ? money.format(c.projThisWeek) : "—"}
-          sub={c.pacePct != null ? paceLabel(c.pacePct) : "pace builds through week"}
-          subTone={paceTone(c.pacePct)}
-          icon={<CalendarRange className="h-4 w-4" />}
-        />
-        {data.anyLastYear ? (
-          <Kpi
-            label="vs last year"
-            value={c.yoyPct != null ? pct(c.yoyPct) : "—"}
-            valueTone={c.yoyPct == null ? undefined : c.yoyPct >= 0 ? "success" : "destructive"}
-            sub={c.yoyPct != null ? "week to date" : "builds through week"}
-            icon={c.yoyPct != null && c.yoyPct < 0 ? <TrendingDown className="h-4 w-4" /> : <TrendingUp className="h-4 w-4" />}
-          />
-        ) : null}
-      </div>
+      {/* Store pulse grid */}
+      <StorePulseGrid cards={data.cards} />
 
       {/* Charts */}
       {(data.hourly || data.week) && (
@@ -303,29 +267,12 @@ function DataHealthChip({ health }: { health: SalesDashboardData["dataHealth"] }
   );
 }
 
-function Kpi({
-  label,
-  value,
-  sub,
-  subTone,
-  valueTone,
-  icon,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  subTone?: Tone;
-  valueTone?: Tone;
-  icon?: React.ReactNode;
-}) {
+function CompanyStat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: Tone }) {
   return (
-    <div className="dash-card rounded-xl border border-border/80 bg-card p-3">
-      <div className="flex items-center justify-between text-muted-foreground">
-        <span className="text-[11px] font-medium">{label}</span>
-        {icon}
-      </div>
-      <p className={cn("mt-1 text-2xl font-semibold tabular-nums", toneClass(valueTone))}>{value}</p>
-      {sub ? <p className={cn("mt-0.5 text-[11px]", subTone ? toneClass(subTone) : "text-muted-foreground")}>{sub}</p> : null}
+    <div>
+      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={cn("text-xl font-semibold tabular-nums leading-tight", toneClass(tone))}>{value}</p>
+      {sub ? <p className="text-[10px] text-muted-foreground">{sub}</p> : null}
     </div>
   );
 }
@@ -351,12 +298,6 @@ function paceTone(pacePct: number | null): Tone {
   if (pacePct >= 100) return "success";
   if (pacePct >= 90) return "warning";
   return "destructive";
-}
-
-function paceLabel(pacePct: number): string {
-  const diff = Math.round(pacePct - 100);
-  if (diff === 0) return "on pace";
-  return diff > 0 ? `+${diff}% vs plan` : `${diff}% vs plan`;
 }
 
 function laborTone(laborPct: number | null, target: number): Tone {

@@ -3,8 +3,12 @@ import { getCurrentUser } from "@/src/lib/firebase/auth-server";
 import { getAllToastOpsSummaries, getToastLocations, getToastWeekSales } from "@/src/lib/toast/api";
 import { getAllForecasts, WEEKDAYS, type StoreForecast } from "@/src/lib/toast/forecast";
 import { getLaborTargets, targetFor } from "@/src/lib/ops/labor-target";
-import { getSlingScheduleBoard } from "@/src/lib/sling/api";
+import { getSlingScheduleBoard, type StoreSchedule } from "@/src/lib/sling/api";
+import { getLaborModel, modelForStore } from "@/src/lib/ops/labor-model";
+import { computeStaffing, coverageFromShifts } from "@/src/lib/ops/staffing-math";
+import { paceToNow, busyNow, projectedEodLaborPct, laborVsBudget, splh, fourWeekTrend, windowSum } from "@/src/lib/ops/store-metrics";
 import { SalesDashboard, type SalesDashboardData, type StoreSalesRow } from "@/src/components/home/SalesDashboard";
+import type { StoreCard } from "@/src/components/home/StorePulseGrid";
 
 const TZ = process.env.STORE_TIMEZONE ?? "America/Los_Angeles";
 
@@ -16,13 +20,14 @@ export async function SalesDashboardServer() {
   const thisMondayYmd = base.startOf("week").toISODate() ?? "";
   const todayWd = base.weekday - 1; // 0=Mon … 6=Sun
 
-  const [user, locations, summaries, forecasts, targets, slingBoard] = await Promise.all([
+  const [user, locations, summaries, forecasts, targets, slingBoard, laborModel] = await Promise.all([
     getCurrentUser(),
     getToastLocations().catch(() => []),
     getAllToastOpsSummaries(now).catch(() => []),
     getAllForecasts().catch((): Record<string, StoreForecast> => ({})),
     getLaborTargets().catch(() => ({ defaultPct: 25, perStore: {} })),
     getSlingScheduleBoard().catch(() => null),
+    getLaborModel(),
   ]);
 
   // Canonical store set = Toast locations ∪ forecast stores, so a store never
@@ -32,12 +37,15 @@ export async function SalesDashboardServer() {
   for (const [guid, f] of Object.entries(forecasts)) if (!storeList.has(guid)) storeList.set(guid, { guid, name: f.storeName || guid });
   const canonical = [...storeList.values()];
 
-  const slingTokens = new Set((slingBoard?.stores ?? []).map((s) => storeToken(s.storeName)));
-  const matchedSling = (name: string) => {
+  const slingByToken = new Map<string, StoreSchedule>();
+  for (const s of slingBoard?.stores ?? []) slingByToken.set(storeToken(s.storeName), s);
+  const matchSched = (name: string): StoreSchedule | null => {
     const t = storeToken(name);
-    for (const token of slingTokens) if (token && t && (t.includes(token) || token.includes(t))) return true;
-    return false;
+    if (slingByToken.has(t)) return slingByToken.get(t) ?? null;
+    for (const [token, s] of slingByToken) if (token && t && (t.includes(token) || token.includes(t))) return s;
+    return null;
   };
+  const matchedSling = (name: string) => matchSched(name) != null;
 
   // Week-to-date sales per store (cached), fetched by guid over the union.
   const weekByGuid: Record<string, Awaited<ReturnType<typeof getToastWeekSales>>> = {};
@@ -193,6 +201,104 @@ export async function SalesDashboardServer() {
   const combinedIntradayPace = combinedProjToNow > 0 ? (combinedTodaySales / combinedProjToNow) * 100 : null;
   const combinedProjFinish = projectFinish(combinedTodaySales, combinedProjToNow, combinedProjDayToday);
 
+  // ── Per-store pulse cards (reuses the pure staffing + metric modules) ──
+  const todayYmd = base.toISODate() ?? "";
+  const signedPct = (v: number) => `${v >= 0 ? "+" : ""}${Math.round(v)}%`;
+  const dayProgressOf = (fcHour: number[], fToNow: number) => {
+    const day = fcHour.reduce((a, b) => a + b, 0);
+    return day > 0 ? fToNow / day : 0;
+  };
+  let eodLaborNum = 0;
+  let eodLaborDen = 0;
+
+  const cards: StoreCard[] = canonical.map((loc) => {
+    const row = stores.find((s) => s.guid === loc.guid)!;
+    const fc = forecasts[loc.guid] ?? null;
+    const week = weekByGuid[loc.guid];
+    const summary = summaryByGuid.get(loc.guid) ?? null;
+    const forecastHour: number[] = fc?.thisWeek.days[todayWd]?.hours ?? new Array(24).fill(0);
+    const actualHour: number[] = week?.byWeekday[todayWd]?.hours ?? new Array(24).fill(0);
+
+    const sched = matchSched(loc.name);
+    const todayShifts = sched?.thisWeek.days.find((d) => d.date === todayYmd || d.isToday)?.shifts ?? [];
+    const scheduledHour = coverageFromShifts(todayShifts.map((s) => ({ startMin: s.startMin, endMin: s.endMin, breaks: s.breaks })));
+
+    const sm = modelForStore(laborModel, loc.guid);
+    const envelope = deriveOpenClose(fc?.thisWeek.days.map((d) => d.hours) ?? []);
+    const openMin = sm.openMin ?? envelope.openMin;
+    const closeMin = sm.closeMin ?? envelope.closeMin;
+    const laborHoursSoFar = summary?.labor.laborHours ?? 0;
+    const laborSoFar = summary?.labor.laborCost ?? 0;
+    const wage = sm.avgWage ?? (laborHoursSoFar > 0.5 && laborSoFar > 0 ? laborSoFar / laborHoursSoFar : 20);
+
+    const staff = computeStaffing({ forecastHour, scheduledHour, actualHour, openMin, closeMin, minCrew: sm.minCrew, matrix: sm.matrix, avgWage: wage, grades: laborModel.grades });
+    const pace = paceToNow(actualHour, forecastHour, nowHour);
+    const busy = busyNow(actualHour, forecastHour, nowHour, 1);
+    const forecastDay = forecastHour.reduce((a, b) => a + b, 0);
+    const forecastRemaining = Math.max(0, forecastDay - pace.forecastToNow);
+    const scheduledLaborRemaining = windowSum(scheduledHour, nowHour, 24) * wage;
+    const projEod = projectedEodLaborPct({ laborSoFar, scheduledLaborRemaining, salesSoFar: pace.actualToNow, forecastRemaining });
+    const budget = laborVsBudget(staff.projectedLaborCost, forecastDay, row.laborTargetPct);
+    const trend = fourWeekTrend((fc?.recentWeeks ?? []).map((w) => w.total));
+    const progress = dayProgressOf(forecastHour, pace.forecastToNow);
+
+    if (projEod != null) {
+      eodLaborNum += laborSoFar + scheduledLaborRemaining;
+      eodLaborDen += pace.actualToNow + forecastRemaining;
+    }
+
+    // Status (basic — Phase D replaces with the full signal config).
+    const overLabor = projEod != null && projEod >= row.laborTargetPct + 5;
+    const behind = pace.deltaPct != null && pace.deltaPct <= -15 && progress >= 0.15;
+    const poorFit = staff.grade === "poor" && staff.scheduledHours > 0;
+    let status: StoreCard["status"];
+    if (!row.hasToastData) status = "nodata";
+    else if (overLabor || behind || poorFit || !row.hasSlingMatch) status = "attention";
+    else if ((projEod == null || projEod <= row.laborTargetPct) && (pace.deltaPct == null || pace.deltaPct >= 0)) status = "good";
+    else status = "ok";
+
+    // One "why" line.
+    let why: string;
+    if (!row.hasToastData) why = "No Toast data today";
+    else if (overLabor) why = `Labor ${Math.round(projEod!)}% proj vs ${row.laborTargetPct}%${staff.prepHours >= 1 ? ` · ${Math.round(staff.prepHours)} prep hrs` : ""}`;
+    else if (behind) why = `Sales ${signedPct(pace.deltaPct!)} vs forecast`;
+    else if (!row.hasSlingMatch) why = "No Sling schedule matched";
+    else if (busy.indexPct != null && busy.indexPct >= 120) why = `Getting busy · last hr ${signedPct(busy.indexPct - 100)} vs forecast`;
+    else if (pace.deltaPct != null && pace.deltaPct >= 10) why = `Running ${signedPct(pace.deltaPct)} ahead of forecast`;
+    else if (projEod != null) why = `On plan · labor ${Math.round(projEod)}% proj`;
+    else why = "Tracking to forecast";
+
+    return {
+      guid: loc.guid,
+      name: loc.name,
+      status,
+      why,
+      netToday: row.todaySales,
+      pacePct: pace.pacePct,
+      paceDelta: pace.deltaPct,
+      projFinish: row.projFinishToday,
+      busyIndex: busy.indexPct,
+      projEodLaborPct: projEod != null ? Math.round(projEod * 10) / 10 : null,
+      liveLaborPct: row.todayLaborPct,
+      laborTargetPct: row.laborTargetPct,
+      laborDeltaDollars: projEod != null ? budget.deltaDollars : null,
+      splhToday: splh(pace.actualToNow, laborHoursSoFar),
+      fitScore: staff.scheduledHours > 0 ? staff.fitScore : null,
+      misplacedHours: staff.scheduledHours > 0 ? staff.misplacedHours : null,
+      sparkActual: actualHour.slice(startHour, endHour + 1),
+      sparkForecast: forecastHour.slice(startHour, endHour + 1),
+      nowIndex: Math.max(0, Math.min(endHour - startHour, Math.floor(nowHour) - startHour)),
+      trendWeeks: trend.weeks,
+      trendWowPct: trend.wowPct,
+      hasToastData: row.hasToastData,
+    };
+  });
+
+  const attentionRank = { attention: 0, nodata: 1, ok: 2, good: 3 } as const;
+  cards.sort((a, b) => attentionRank[a.status] - attentionRank[b.status] || b.netToday - a.netToday);
+  const companyProjEodLabor = eodLaborDen > 0 ? (eodLaborNum / eodLaborDen) * 100 : null;
+  const needAttention = cards.filter((c) => c.status === "attention").length;
+
   // ── Weekly projected vs actual vs last-year (combined) ──
   const weekDays = WEEKDAYS.map((weekday, d) => {
     let projected = 0;
@@ -238,6 +344,15 @@ export async function SalesDashboardServer() {
     hourly: { startHour, endHour, actual: combinedActualHour, projected: combinedProjHour, nowHour },
     week: { days: weekDays, todayIndex: todayWd },
     watchlist,
+    cards,
+    company: {
+      netToday: combinedTodaySales,
+      paceDelta: combinedIntradayPace != null ? combinedIntradayPace - 100 : null,
+      projFinish: combinedProjFinish,
+      projEodLaborPct: companyProjEodLabor,
+      laborTargetPct: targets.defaultPct,
+      needAttention,
+    },
     stores,
   };
 
@@ -257,4 +372,15 @@ function firstName(value: string): string {
 
 function shortNameFor(name: string): string {
   return name.replace(/^seoul bowl\s*-?\s*/i, "").trim() || name;
+}
+
+function deriveOpenClose(days: number[][]): { openMin: number; closeMin: number } {
+  let first = 24;
+  let last = 0;
+  for (const hours of days) for (let h = 0; h < 24; h++) if ((hours[h] ?? 0) >= 20) {
+    first = Math.min(first, h);
+    last = Math.max(last, h);
+  }
+  if (first > last) return { openMin: 11 * 60, closeMin: 21 * 60 };
+  return { openMin: first * 60, closeMin: (last + 1) * 60 };
 }
