@@ -796,6 +796,67 @@ export async function updateLaborTargets(formData: FormData) {
   revalidatePath("/");
 }
 
+export async function updateLaborModel(formData: FormData) {
+  const user = await currentUserOrThrow();
+  requireAdminRole(user);
+
+  const num = (key: string): number | null => {
+    const raw = formData.get(key);
+    if (raw == null || String(raw).trim() === "") return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  };
+  const timeToMin = (key: string): number | null => {
+    const raw = formData.get(key);
+    if (!raw || typeof raw !== "string" || !raw.includes(":")) return null;
+    const [h, m] = raw.split(":").map(Number);
+    return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
+  };
+
+  // Default matrix: up to 6 bands (max blank = open-ended top band).
+  const matrix: Array<{ max: number | null; staff: number }> = [];
+  for (let i = 0; i < 6; i++) {
+    const staff = num(`band_staff_${i}`);
+    if (staff == null || staff < 0) continue;
+    const max = num(`band_max_${i}`);
+    matrix.push({ max: max != null && max > 0 ? Math.round(max) : null, staff: Math.round(staff) });
+  }
+  matrix.sort((a, b) => (a.max == null ? 1 : b.max == null ? -1 : a.max - b.max));
+
+  const guids = (formData.getAll("store_guid") as string[]).filter(Boolean);
+  const perStore: Record<string, Record<string, number>> = {};
+  for (const g of guids) {
+    const o: Record<string, number> = {};
+    const minCrew = num(`s_${g}_min_crew`);
+    const avgWage = num(`s_${g}_avg_wage`);
+    const openMin = timeToMin(`s_${g}_open`);
+    const closeMin = timeToMin(`s_${g}_close`);
+    if (minCrew != null && minCrew >= 0) o.min_crew = Math.round(minCrew);
+    if (avgWage != null && avgWage > 0) o.avg_wage = avgWage;
+    if (openMin != null) o.open_min = openMin;
+    if (closeMin != null) o.close_min = closeMin;
+    if (Object.keys(o).length) perStore[g] = o;
+  }
+
+  const defMinCrew = num("default_min_crew");
+  const gGood = num("grade_good");
+  const gOk = num("grade_ok");
+
+  await adminDb.collection("ops_config").doc("labor_model").set({
+    default: {
+      matrix: matrix.length ? matrix : null,
+      min_crew: defMinCrew != null && defMinCrew >= 0 ? Math.round(defMinCrew) : 2,
+    },
+    per_store: perStore,
+    grade_good: gGood ?? 90,
+    grade_ok: gOk ?? 80,
+    updated_at: FieldValue.serverTimestamp(),
+    updated_by_uid: user.uid,
+  });
+  revalidatePath("/operations");
+  revalidatePath("/");
+}
+
 export async function createProject(formData: FormData) {
   const user = await currentUserOrThrow();
   requireAdminRole(user);

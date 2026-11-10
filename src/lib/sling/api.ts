@@ -50,6 +50,8 @@ export interface SlingShiftView {
   userAvatar: string | null;
   position: string;
   status: ShiftStatus;
+  /** Unpaid breaks on the shift (store-local minutes). Absent/empty when none are set. */
+  breaks?: Array<{ startMin: number; endMin: number }>;
 }
 
 export interface CoverageGap {
@@ -371,6 +373,25 @@ async function buildNameMap(config: SlingConfig): Promise<Map<string, string>> {
   return map;
 }
 
+// Unpaid breaks explicitly set on a shift, in store-local minutes. Paid breaks
+// (if flagged) don't reduce paid coverage, so they're skipped. Defensive about
+// field shape — Sling only returns these when a break is on the shift.
+function parseShiftBreaks(record: Record<string, unknown>, timezone: string): Array<{ startMin: number; endMin: number }> {
+  const raw = record.breaks;
+  if (!Array.isArray(raw)) return [];
+  const out: Array<{ startMin: number; endMin: number }> = [];
+  for (const b of raw) {
+    const br = asRecord(b);
+    if (br.paid === true || br.isPaid === true) continue;
+    if (br.dtstart == null || br.dtend == null) continue;
+    const s = tzParts(String(br.dtstart), timezone);
+    const e = tzParts(String(br.dtend), timezone);
+    const endMin = e.min <= s.min ? e.min + 1440 : e.min;
+    if (endMin > s.min) out.push({ startMin: s.min, endMin });
+  }
+  return out;
+}
+
 function groupShifts(events: unknown[], snapshot: SlingSnapshot, timezone: string): Record<string, SlingShiftView[]> {
   const byLoc: Record<string, SlingShiftView[]> = {};
   for (const event of events) {
@@ -395,6 +416,7 @@ function groupShifts(events: unknown[], snapshot: SlingSnapshot, timezone: strin
       userAvatar: snapshot.userAvatars[String(asRecord(record.user).id)] ?? null,
       position: snapshot.positions[String(asRecord(record.position).id)] ?? "",
       status,
+      breaks: parseShiftBreaks(record, timezone),
     });
   }
   for (const arr of Object.values(byLoc)) {

@@ -7,11 +7,14 @@ import { ToastOutOfStockPanel } from "@/src/components/toast/ToastOutOfStockPane
 import { NoShowSettings } from "@/src/components/ops/NoShowSettings";
 import { OutOfStockAlertSettings } from "@/src/components/ops/OutOfStockAlertSettings";
 import { LaborTargetSettings } from "@/src/components/ops/LaborTargetSettings";
+import { LaborModelSettings, type LaborModelStoreRow } from "@/src/components/ops/LaborModelSettings";
 import { getSlingMonitor, listSlingChats, type SlingChat } from "@/src/lib/sling/api";
 import { getAllToastOutOfStock, getToastLocations } from "@/src/lib/toast/api";
 import { getNoShowConfig } from "@/src/lib/ops/no-show-config";
 import { getOutOfStockAlertConfig } from "@/src/lib/ops/out-of-stock-alert-config";
 import { getLaborTargets } from "@/src/lib/ops/labor-target";
+import { getLaborModel, modelForStore, DEFAULT_LABOR_MODEL, type LaborModel } from "@/src/lib/ops/labor-model";
+import { getStaffingVsForecast } from "@/src/lib/ops/staffing";
 import { toAlertStores } from "@/src/lib/ops/out-of-stock-alert";
 import { getCurrentUser } from "@/src/lib/firebase/auth-server";
 
@@ -32,12 +35,32 @@ export default async function OperationsPage() {
   // Sling chat list for the out-of-stock alert picker (admins only).
   let slingChats: SlingChat[] = [];
   let slingChatsError: string | null = null;
+  let laborModel: LaborModel = DEFAULT_LABOR_MODEL;
+  let laborModelRows: LaborModelStoreRow[] = [];
   if (isAdmin) {
     try {
       slingChats = await listSlingChats();
     } catch (error) {
       slingChatsError = error instanceof Error ? error.message : "Sling chats could not be loaded.";
     }
+    const [model, staffing] = await Promise.all([getLaborModel(), getStaffingVsForecast().catch(() => null)]);
+    laborModel = model;
+    const byGuid = new Map((staffing?.stores ?? []).map((s) => [s.guid, s]));
+    laborModelRows = toastLocations.map((loc) => {
+      const st = byGuid.get(loc.guid);
+      const m = modelForStore(model, loc.guid);
+      return {
+        guid: loc.guid,
+        name: loc.name,
+        impliedLaborPct: st?.days[0]?.result.projectedLaborPct ?? null,
+        openMin: st?.days[0]?.openMin ?? m.openMin ?? 11 * 60,
+        closeMin: st?.days[0]?.closeMin ?? m.closeMin ?? 21 * 60,
+        avgWage: st?.avgWage ?? m.avgWage ?? 20,
+        minCrew: m.minCrew,
+        targetPct: st?.targetPct ?? laborTargets.defaultPct,
+        overridden: Boolean(model.perStore[loc.guid]),
+      };
+    });
   }
 
   return (
@@ -80,6 +103,8 @@ export default async function OperationsPage() {
           {isAdmin && toastLocations.length ? (
             <LaborTargetSettings targets={laborTargets} stores={toastLocations.map((l) => ({ guid: l.guid, name: l.name }))} />
           ) : null}
+
+          {isAdmin && laborModelRows.length ? <LaborModelSettings model={laborModel} stores={laborModelRows} /> : null}
 
           {isAdmin ? (
             <OutOfStockAlertSettings
