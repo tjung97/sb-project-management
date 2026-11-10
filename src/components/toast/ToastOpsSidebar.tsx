@@ -83,7 +83,7 @@ export function ToastOpsSidebar({ stores }: { stores: ToastStoreSummary[] }) {
               {/* Combined total */}
               <div className="rounded-md border border-border/80 bg-muted/40 px-3 py-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-medium text-muted-foreground">All stores</span>
+                  <span className="text-[11px] font-medium text-muted-foreground">All stores · net sales</span>
                   <span className="text-[11px] text-muted-foreground">
                     {totalOrders} orders · {totalWorking} working
                   </span>
@@ -103,7 +103,7 @@ export function ToastOpsSidebar({ stores }: { stores: ToastStoreSummary[] }) {
                         <div className="min-w-0">
                           <p className="truncate text-xs font-medium">{shortName(store.name)}</p>
                           <p className="text-[10px] text-muted-foreground">
-                            {store.summary.sales.orderCount} orders · {store.summary.labor.laborHours.toFixed(0)}h
+                            {store.summary.sales.orderCount} orders · {store.summary.labor.laborHours.toFixed(0)}h labor
                           </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">

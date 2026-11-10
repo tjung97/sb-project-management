@@ -3,9 +3,12 @@ import { getCurrentUser } from "@/src/lib/firebase/auth-server";
 import { getAllToastOpsSummaries, getToastLocations, getToastWeekSales } from "@/src/lib/toast/api";
 import { getAllForecasts, WEEKDAYS, type StoreForecast } from "@/src/lib/toast/forecast";
 import { getLaborTargets, targetFor } from "@/src/lib/ops/labor-target";
+import { getSlingScheduleBoard } from "@/src/lib/sling/api";
 import { SalesDashboard, type SalesDashboardData, type StoreSalesRow } from "@/src/components/home/SalesDashboard";
 
 const TZ = process.env.STORE_TIMEZONE ?? "America/Los_Angeles";
+
+const storeToken = (name: string) => name.toLowerCase().replace(/seoul bowl/g, "").replace(/[^a-z0-9]/g, "");
 
 export async function SalesDashboardServer() {
   const now = new Date();
@@ -13,18 +16,33 @@ export async function SalesDashboardServer() {
   const thisMondayYmd = base.startOf("week").toISODate() ?? "";
   const todayWd = base.weekday - 1; // 0=Mon … 6=Sun
 
-  const [user, locations, summaries, forecasts, targets] = await Promise.all([
+  const [user, locations, summaries, forecasts, targets, slingBoard] = await Promise.all([
     getCurrentUser(),
     getToastLocations().catch(() => []),
     getAllToastOpsSummaries(now).catch(() => []),
     getAllForecasts().catch((): Record<string, StoreForecast> => ({})),
     getLaborTargets().catch(() => ({ defaultPct: 25, perStore: {} })),
+    getSlingScheduleBoard().catch(() => null),
   ]);
 
-  // Week-to-date sales per store (cached), fetched in parallel.
+  // Canonical store set = Toast locations ∪ forecast stores, so a store never
+  // disappears just because getToastLocations returned a partial/cached list.
+  const storeList = new Map<string, { guid: string; name: string }>();
+  for (const loc of locations) storeList.set(loc.guid, { guid: loc.guid, name: loc.name });
+  for (const [guid, f] of Object.entries(forecasts)) if (!storeList.has(guid)) storeList.set(guid, { guid, name: f.storeName || guid });
+  const canonical = [...storeList.values()];
+
+  const slingTokens = new Set((slingBoard?.stores ?? []).map((s) => storeToken(s.storeName)));
+  const matchedSling = (name: string) => {
+    const t = storeToken(name);
+    for (const token of slingTokens) if (token && t && (t.includes(token) || token.includes(t))) return true;
+    return false;
+  };
+
+  // Week-to-date sales per store (cached), fetched by guid over the union.
   const weekByGuid: Record<string, Awaited<ReturnType<typeof getToastWeekSales>>> = {};
   await Promise.all(
-    locations.map(async (loc) => {
+    canonical.map(async (loc) => {
       weekByGuid[loc.guid] = await getToastWeekSales(loc.guid, thisMondayYmd).catch(() => null);
     })
   );
@@ -36,7 +54,7 @@ export async function SalesDashboardServer() {
   // ── Combined hourly curves (today): actual so far vs projected ──
   const combinedActualHour = new Array(24).fill(0);
   const combinedProjHour = new Array(24).fill(0);
-  for (const loc of locations) {
+  for (const loc of canonical) {
     const todayActual = weekByGuid[loc.guid]?.byWeekday[todayWd]?.hours;
     const todayProj = forecasts[loc.guid]?.thisWeek.days[todayWd]?.hours;
     for (let h = 0; h < 24; h++) {
@@ -78,10 +96,11 @@ export async function SalesDashboardServer() {
     return Math.round(projDay * (actualToNow / projToNow));
   };
 
-  const stores: StoreSalesRow[] = locations.map((loc) => {
+  const stores: StoreSalesRow[] = canonical.map((loc) => {
     const week = weekByGuid[loc.guid];
     const fc = forecasts[loc.guid] ?? null;
     const summary = summaryByGuid.get(loc.guid) ?? null;
+    const hasToastData = week != null;
 
     const dayTotals = week ? week.byWeekday.map((d) => d.total) : new Array(7).fill(0);
     const todaySales = Math.round(dayTotals[todayWd] ?? 0);
@@ -123,6 +142,8 @@ export async function SalesDashboardServer() {
       notes: fc?.thisWeek.days.map((d) => d.note) ?? [],
       computedAt: fc?.computedAt ?? null,
       sparkline: (week?.byWeekday[todayWd]?.hours ?? new Array(24).fill(0)).slice(startHour, endHour + 1),
+      hasToastData,
+      hasSlingMatch: matchedSling(loc.name),
     };
   });
 
@@ -177,7 +198,7 @@ export async function SalesDashboardServer() {
     let projected = 0;
     let lastYear = 0;
     let actual = 0;
-    for (const loc of locations) {
+    for (const loc of canonical) {
       const fc = forecasts[loc.guid];
       projected += fc?.thisWeek.days[d]?.total ?? 0;
       lastYear += fc?.lastYearThisWeek.days[d]?.total ?? 0;
@@ -186,12 +207,21 @@ export async function SalesDashboardServer() {
     return { weekday, projected, lastYear, actual: d <= todayWd ? Math.round(actual) : null };
   });
 
+  const dataHealth = {
+    updatedLabel: base.toFormat("h:mm a"),
+    noDataStores: stores.filter((s) => !s.hasToastData).map((s) => shortNameFor(s.name)),
+    noSlingStores: stores.filter((s) => !s.hasSlingMatch).map((s) => shortNameFor(s.name)),
+  };
+  const anyLastYear = stores.some((s) => s.lyHasData);
+
   const data: SalesDashboardData = {
     greeting: greeting(base.hour),
     userName: firstName(user?.name ?? user?.email ?? ""),
     dateLabel: base.toFormat("cccc, LLLL d"),
-    configured: locations.length > 0,
+    configured: canonical.length > 0,
     anyForecast,
+    anyLastYear,
+    dataHealth,
     combined: {
       todaySales: combinedTodaySales,
       wtdSales: sum((s) => s.wtdSales),
@@ -223,4 +253,8 @@ function greeting(hour: number): string {
 function firstName(value: string): string {
   const name = value.includes("@") ? value.split("@")[0] : value;
   return name.split(/[ .]/)[0].replace(/^\w/, (c) => c.toUpperCase());
+}
+
+function shortNameFor(name: string): string {
+  return name.replace(/^seoul bowl\s*-?\s*/i, "").trim() || name;
 }

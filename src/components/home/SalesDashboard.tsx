@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, DollarSign, CalendarRange, Users, Minus, Info, Target, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, CalendarRange, Users, Minus, Info, Target, AlertTriangle, CheckCircle2, Activity } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { HourlyChart, WeekChart, Sparkline, type HourlyData, type WeekDayBar } from "@/src/components/home/SalesVisuals";
 
@@ -24,6 +24,8 @@ export interface StoreSalesRow {
   notes: string[];
   computedAt: string | null;
   sparkline: number[]; // today's actual sales by hour (business range)
+  hasToastData: boolean;
+  hasSlingMatch: boolean;
 }
 
 export interface SalesDashboardData {
@@ -32,6 +34,8 @@ export interface SalesDashboardData {
   dateLabel: string;
   configured: boolean;
   anyForecast: boolean;
+  anyLastYear: boolean;
+  dataHealth: { updatedLabel: string; noDataStores: string[]; noSlingStores: string[] };
   combined: {
     todaySales: number;
     wtdSales: number;
@@ -80,6 +84,7 @@ export function SalesDashboard({ data }: { data: SalesDashboardData }) {
           ) : null}
           {c.projFinishToday != null ? ` · on track for ~${money.format(c.projFinishToday)}` : ""}
         </p>
+        <DataHealthChip health={data.dataHealth} />
       </section>
 
       {/* Needs attention today */}
@@ -134,13 +139,15 @@ export function SalesDashboard({ data }: { data: SalesDashboardData }) {
           subTone={paceTone(c.pacePct)}
           icon={<CalendarRange className="h-4 w-4" />}
         />
-        <Kpi
-          label="vs last year"
-          value={c.yoyPct != null ? pct(c.yoyPct) : "—"}
-          valueTone={c.yoyPct == null ? undefined : c.yoyPct >= 0 ? "success" : "destructive"}
-          sub={c.yoyPct != null ? "week to date" : "no last-year data"}
-          icon={c.yoyPct != null && c.yoyPct < 0 ? <TrendingDown className="h-4 w-4" /> : <TrendingUp className="h-4 w-4" />}
-        />
+        {data.anyLastYear ? (
+          <Kpi
+            label="vs last year"
+            value={c.yoyPct != null ? pct(c.yoyPct) : "—"}
+            valueTone={c.yoyPct == null ? undefined : c.yoyPct >= 0 ? "success" : "destructive"}
+            sub={c.yoyPct != null ? "week to date" : "builds through week"}
+            icon={c.yoyPct != null && c.yoyPct < 0 ? <TrendingDown className="h-4 w-4" /> : <TrendingUp className="h-4 w-4" />}
+          />
+        ) : null}
       </div>
 
       {/* Charts */}
@@ -182,7 +189,10 @@ export function SalesDashboard({ data }: { data: SalesDashboardData }) {
             <tbody>
               {data.stores.map((s) => (
                 <tr key={s.guid} className="border-b border-border/50 last:border-b-0 hover:bg-accent/20">
-                  <td className="py-2.5 pl-4 font-medium">{shortName(s.name)}</td>
+                  <td className="py-2.5 pl-4 font-medium">
+                    {shortName(s.name)}
+                    {!s.hasToastData ? <span className="ml-1.5 rounded bg-warning/15 px-1 py-0.5 text-[9px] font-medium text-warning-foreground align-middle">no data</span> : null}
+                  </td>
                   <Td align="right">{money.format(s.todaySales)}</Td>
                   <td className="px-2 py-2.5"><Sparkline values={s.sparkline} /></td>
                   <Td align="right">
@@ -261,6 +271,34 @@ export function SalesDashboard({ data }: { data: SalesDashboardData }) {
           )}
         </div>
       </details>
+    </div>
+  );
+}
+
+function DataHealthChip({ health }: { health: SalesDashboardData["dataHealth"] }) {
+  const issues: string[] = [];
+  if (health.noDataStores.length) issues.push(`${health.noDataStores.length} no Toast data`);
+  if (health.noSlingStores.length) issues.push(`${health.noSlingStores.length} no Sling match`);
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+      <span className="inline-flex items-center gap-1">
+        <Activity className="h-3 w-3" /> Updated {health.updatedLabel}
+      </span>
+      {issues.length ? (
+        <span
+          className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-warning-foreground"
+          title={[
+            health.noDataStores.length ? `No Toast data: ${health.noDataStores.join(", ")}` : "",
+            health.noSlingStores.length ? `No Sling match: ${health.noSlingStores.join(", ")}` : "",
+          ].filter(Boolean).join(" · ")}
+        >
+          <AlertTriangle className="h-3 w-3" /> {issues.join(" · ")}
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1 text-success">
+          <CheckCircle2 className="h-3 w-3" /> all stores reporting
+        </span>
+      )}
     </div>
   );
 }

@@ -911,21 +911,22 @@ function employeeLaborRow(
   return { row, cost };
 }
 
+// Net sales = Σ check.amount (pre-tax), with the SAME field and void/deleted
+// filters as getToastWeekSales so the sidebar, hero, table and forecast pace all
+// speak one definition. (See getToastWeekSales — this must stay in lockstep.)
 function buildNetSalesFromChecks(orders: unknown[]): number {
   let total = 0;
   for (const order of orders) {
-    const orderRecord = asRecord(order);
-    if (orderRecord.voided === true) continue;
-    for (const check of arrayValue(orderRecord.checks)) {
-      const checkRecord = asRecord(check);
-      if (checkRecord.voided === true) continue;
-      const subTotal = numberValue(checkRecord.subTotal);
-      if (subTotal > 0) {
-        total += subTotal;
-      } else {
-        total += Math.max(0, numberValue(checkRecord.totalAmount) - numberValue(checkRecord.taxAmount));
-      }
+    const o = asRecord(order);
+    if (o.voided === true || o.deleted === true) continue;
+    let amt = 0;
+    for (const check of arrayValue(o.checks)) {
+      const c = asRecord(check);
+      if (c.voided === true || c.deleted === true) continue;
+      amt += numberValue(c.amount);
     }
+    if (amt <= 0) continue;
+    total += amt;
   }
   return total;
 }
