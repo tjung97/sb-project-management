@@ -101,7 +101,7 @@ function TodayRow({ store, open, onToggle }: { store: StoreStaffing; open: boole
 
 // ───────────────────────────── The 3-row chart ──────────────────────────────
 
-function DayChart({ day, expanded }: { day: StaffDay; expanded: boolean }) {
+export function DayChart({ day, expanded }: { day: StaffDay; expanded: boolean }) {
   const hrs = day.result.hours;
   if (!hrs.length) return null;
   const minH = Math.min(...hrs.map((h) => h.hour));
