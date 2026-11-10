@@ -7,6 +7,7 @@ import { getSlingScheduleBoard, type StoreSchedule } from "@/src/lib/sling/api";
 import { getLaborModel, modelForStore } from "@/src/lib/ops/labor-model";
 import { computeStaffing, coverageFromShifts } from "@/src/lib/ops/staffing-math";
 import { paceToNow, busyNow, projectedEodLaborPct, laborVsBudget, splh, fourWeekTrend, windowSum } from "@/src/lib/ops/store-metrics";
+import { evaluateSignals, buildWins, type LaborOverReason, type Win } from "@/src/lib/ops/signals";
 import { SalesDashboard, type SalesDashboardData, type StoreSalesRow } from "@/src/components/home/SalesDashboard";
 import type { StoreCard } from "@/src/components/home/StorePulseGrid";
 
@@ -203,11 +204,6 @@ export async function SalesDashboardServer() {
 
   // ── Per-store pulse cards (reuses the pure staffing + metric modules) ──
   const todayYmd = base.toISODate() ?? "";
-  const signedPct = (v: number) => `${v >= 0 ? "+" : ""}${Math.round(v)}%`;
-  const dayProgressOf = (fcHour: number[], fToNow: number) => {
-    const day = fcHour.reduce((a, b) => a + b, 0);
-    return day > 0 ? fToNow / day : 0;
-  };
   let eodLaborNum = 0;
   let eodLaborDen = 0;
 
@@ -240,33 +236,32 @@ export async function SalesDashboardServer() {
     const projEod = projectedEodLaborPct({ laborSoFar, scheduledLaborRemaining, salesSoFar: pace.actualToNow, forecastRemaining });
     const budget = laborVsBudget(staff.projectedLaborCost, forecastDay, row.laborTargetPct);
     const trend = fourWeekTrend((fc?.recentWeeks ?? []).map((w) => w.total));
-    const progress = dayProgressOf(forecastHour, pace.forecastToNow);
 
     if (projEod != null) {
       eodLaborNum += laborSoFar + scheduledLaborRemaining;
       eodLaborDen += pace.actualToNow + forecastRemaining;
     }
 
-    // Status (basic — Phase D replaces with the full signal config).
-    const overLabor = projEod != null && projEod >= row.laborTargetPct + 5;
-    const behind = pace.deltaPct != null && pace.deltaPct <= -15 && progress >= 0.15;
-    const poorFit = staff.grade === "poor" && staff.scheduledHours > 0;
-    let status: StoreCard["status"];
-    if (!row.hasToastData) status = "nodata";
-    else if (overLabor || behind || poorFit || !row.hasSlingMatch) status = "attention";
-    else if ((projEod == null || projEod <= row.laborTargetPct) && (pace.deltaPct == null || pace.deltaPct >= 0)) status = "good";
-    else status = "ok";
+    // Signals (rule-based, thresholds in signals.ts).
+    const fromH = Math.floor(nowHour);
+    let understaffNext2h = 0;
+    for (const h of staff.hours) if (h.open && h.hour >= fromH && h.hour <= fromH + 1) understaffNext2h = Math.max(understaffNext2h, h.required - h.scheduled);
+    const laborOverReason: LaborOverReason = staff.prepHours >= 2 ? "prep hours" : staff.netHours > 0 ? "extra hours" : "slow sales";
+    const openHoursElapsed = Math.max(0, nowHour - openMin / 60);
 
-    // One "why" line.
-    let why: string;
-    if (!row.hasToastData) why = "No Toast data today";
-    else if (overLabor) why = `Labor ${Math.round(projEod!)}% proj vs ${row.laborTargetPct}%${staff.prepHours >= 1 ? ` · ${Math.round(staff.prepHours)} prep hrs` : ""}`;
-    else if (behind) why = `Sales ${signedPct(pace.deltaPct!)} vs forecast`;
-    else if (!row.hasSlingMatch) why = "No Sling schedule matched";
-    else if (busy.indexPct != null && busy.indexPct >= 120) why = `Getting busy · last hr ${signedPct(busy.indexPct - 100)} vs forecast`;
-    else if (pace.deltaPct != null && pace.deltaPct >= 10) why = `Running ${signedPct(pace.deltaPct)} ahead of forecast`;
-    else if (projEod != null) why = `On plan · labor ${Math.round(projEod)}% proj`;
-    else why = "Tracking to forecast";
+    const sig = evaluateSignals({
+      hasToastData: row.hasToastData,
+      hasSlingMatch: row.hasSlingMatch,
+      openHoursElapsed,
+      paceDelta: pace.deltaPct,
+      busyIndexPct: busy.indexPct,
+      projEodLaborPct: projEod,
+      laborTargetPct: row.laborTargetPct,
+      understaffNext2h,
+      laborOverReason,
+    });
+    const status: StoreCard["status"] = sig.status === "neutral" ? "ok" : sig.status;
+    const why = sig.why;
 
     return {
       guid: loc.guid,
@@ -298,6 +293,8 @@ export async function SalesDashboardServer() {
   cards.sort((a, b) => attentionRank[a.status] - attentionRank[b.status] || b.netToday - a.netToday);
   const companyProjEodLabor = eodLaborDen > 0 ? (eodLaborNum / eodLaborDen) * 100 : null;
   const needAttention = cards.filter((c) => c.status === "attention").length;
+  const needsAttention = cards.filter((c) => c.status === "attention").map((c) => ({ guid: c.guid, name: shortNameFor(c.name), why: c.why }));
+  const wins: Win[] = buildWins(cards.map((c) => ({ guid: c.guid, name: shortNameFor(c.name), projEodLaborPct: c.projEodLaborPct, laborTargetPct: c.laborTargetPct, paceDelta: c.paceDelta, hasToastData: c.hasToastData })));
 
   // ── Weekly projected vs actual vs last-year (combined) ──
   const weekDays = WEEKDAYS.map((weekday, d) => {
@@ -345,6 +342,8 @@ export async function SalesDashboardServer() {
     week: { days: weekDays, todayIndex: todayWd },
     watchlist,
     cards,
+    needsAttention,
+    wins,
     company: {
       netToday: combinedTodaySales,
       paceDelta: combinedIntradayPace != null ? combinedIntradayPace - 100 : null,

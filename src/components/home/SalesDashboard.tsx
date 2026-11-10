@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, Minus, Info, AlertTriangle, CheckCircle2, Activity } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Info, AlertTriangle, CheckCircle2, Activity, Trophy } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { HourlyChart, WeekChart, Sparkline, type HourlyData, type WeekDayBar } from "@/src/components/home/SalesVisuals";
 import { StorePulseGrid, type StoreCard } from "@/src/components/home/StorePulseGrid";
@@ -54,6 +54,8 @@ export interface SalesDashboardData {
   week: { days: WeekDayBar[]; todayIndex: number } | null;
   watchlist: Array<{ guid: string; name: string; issues: string[] }>;
   cards: StoreCard[];
+  needsAttention: Array<{ guid: string; name: string; why: string }>;
+  wins: Array<{ kind: "labor" | "pace"; guid: string; name: string; detail: string }>;
   company: {
     netToday: number;
     paceDelta: number | null;
@@ -110,6 +112,44 @@ export function SalesDashboard({ data }: { data: SalesDashboardData }) {
         </div>
         <DataHealthChip health={data.dataHealth} />
       </section>
+
+      {/* Attention + Wins strips */}
+      {(data.needsAttention.length > 0 || data.wins.length > 0) && (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {data.needsAttention.length > 0 ? (
+            <section className="dash-rise rounded-xl border border-warning/40 bg-warning/5 p-3">
+              <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-warning-foreground">
+                <AlertTriangle className="h-4 w-4" /> Needs attention
+              </div>
+              <ul className="space-y-1">
+                {data.needsAttention.map((s) => (
+                  <li key={s.guid} className="flex items-baseline gap-2 text-xs">
+                    <span className="font-medium">{s.name}</span>
+                    <span className="text-muted-foreground">·</span>
+                    <span className="text-warning-foreground">{s.why}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          {data.wins.length > 0 ? (
+            <section className="dash-rise rounded-xl border border-success/30 bg-success/5 p-3">
+              <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-success">
+                <Trophy className="h-4 w-4" /> Wins
+              </div>
+              <ul className="space-y-1">
+                {data.wins.map((w) => (
+                  <li key={`${w.kind}-${w.guid}`} className="flex items-baseline gap-2 text-xs">
+                    <span className="font-medium">{w.name}</span>
+                    <span className="text-muted-foreground">·</span>
+                    <span className="text-success">{w.detail}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </div>
+      )}
 
       {/* Store pulse grid */}
       <StorePulseGrid cards={data.cards} />
