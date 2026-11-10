@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, ReceiptText, Soup } from "lucide-react";
+import { CalendarDays, Soup } from "lucide-react";
 import { MainNav } from "@/src/components/layout/MainNav";
 import { IssuesToolbarRoot } from "@/src/components/ops/IssuesToolbarRoot";
 import { RoleBadge } from "@/src/components/ops/RoleBadge";
@@ -15,7 +15,6 @@ import { AppShellIssueContext } from "@/src/components/layout/AppShellIssueConte
 import { useAppShellHeaderMetrics } from "@/src/hooks/useAppShellHeaderMetrics";
 import { useHeaderGlass } from "@/src/hooks/useHeaderGlass";
 import { useCalendarPanel } from "@/src/components/calendar/CalendarPanelContext";
-import { useToastPanel } from "@/src/components/toast/ToastPanelContext";
 import { activeNavItem } from "@/src/lib/ops/app-navigation";
 import type { AuthUser } from "@/src/lib/firebase/auth-server";
 import { cn } from "@/src/lib/utils";
@@ -28,9 +27,7 @@ export function AppShellHeader({ user }: { user: AuthUser }) {
   const { state: issueHeader } = useIssueHeader();
   const headerRef = useRef<HTMLElement>(null);
   const { open: calendarOpen, hydrated: calendarHydrated, toggle: toggleCalendar } = useCalendarPanel();
-  const { open: toastOpen, hydrated: toastHydrated, toggle: toggleToast } = useToastPanel();
-  const calendarActive = calendarHydrated ? calendarOpen : true;
-  const toastActive = toastHydrated ? toastOpen : true;
+  const calendarActive = calendarHydrated ? calendarOpen : false;
   useAppShellHeaderMetrics(headerRef, `${glass}:${pathname}`);
 
   const isIssueDetail =
@@ -80,20 +77,6 @@ export function AppShellHeader({ user }: { user: AuthUser }) {
               >
                 <span>Search</span>
                 <kbd className="rounded border border-border/80 bg-background/80 px-1 font-sans text-[10px]">⌘K</kbd>
-              </button>
-              <button
-                type="button"
-                onClick={toggleToast}
-                className={cn(
-                  "rounded-md p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
-                  toastActive
-                    ? "bg-primary/10 text-primary hover:bg-primary/15"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                )}
-                aria-label={toastActive ? "Hide Toast panel" : "Show Toast panel"}
-                title={toastActive ? "Hide Toast panel" : "Show Toast panel"}
-              >
-                <ReceiptText className="h-4 w-4" />
               </button>
               <button
                 type="button"

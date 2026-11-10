@@ -348,9 +348,11 @@ export async function SalesDashboardServer() {
       netToday: combinedTodaySales,
       paceDelta: combinedIntradayPace != null ? combinedIntradayPace - 100 : null,
       projFinish: combinedProjFinish,
+      projDayToday: anyForecast ? Math.round(combinedProjDayToday) : null,
       projEodLaborPct: companyProjEodLabor,
       laborTargetPct: targets.defaultPct,
       needAttention,
+      phase: nowHour < startHour ? "preopen" : nowHour > endHour + 0.5 ? "closed" : "service",
     },
     stores,
   };

@@ -10,19 +10,20 @@ interface CalendarPanelContextValue {
 }
 
 const CalendarPanelContext = createContext<CalendarPanelContextValue>({
-  open: true,
+  open: false,
   hydrated: false,
   toggle: () => {},
   close: () => {},
 });
 
 export function CalendarPanelProvider({ children }: { children: React.ReactNode }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setOpen(localStorage.getItem("calendar-panel-open") !== "false");
+      // Collapsed by default so the dashboard gets the width; remembers opt-in.
+      setOpen(localStorage.getItem("calendar-panel-open") === "true");
       setHydrated(true);
     }, 0);
     return () => window.clearTimeout(timer);

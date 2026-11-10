@@ -99,7 +99,7 @@ function StoreCardView({ card }: { card: StoreCard }) {
   return (
     <Link
       href={`/dashboard/store/${card.guid}`}
-      className="group block rounded-xl border border-border/80 bg-card p-3 transition hover:border-foreground/25 hover:shadow-sm"
+      className="group flex h-full flex-col rounded-xl border border-border/80 bg-card p-3 transition hover:border-foreground/25 hover:shadow-sm"
     >
       <div className="flex items-center gap-2">
         <span className="truncate text-sm font-semibold">{shortName(card.name)}</span>
@@ -138,7 +138,7 @@ function StoreCardView({ card }: { card: StoreCard }) {
         <TrendBars weeks={card.trendWeeks} wow={card.trendWowPct} />
       </div>
 
-      <p className="mt-2 truncate text-[11px] text-muted-foreground" title={card.why}>{card.why}</p>
+      <p className="mt-auto pt-2 truncate text-[11px] text-muted-foreground" title={card.why}>{card.why}</p>
     </Link>
   );
 }
