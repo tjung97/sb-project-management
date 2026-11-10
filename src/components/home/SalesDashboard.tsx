@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, DollarSign, CalendarRange, Users, Minus, Info } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, CalendarRange, Users, Minus, Info, Target, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { HourlyChart, WeekChart, Sparkline, type HourlyData, type WeekDayBar } from "@/src/components/home/SalesVisuals";
 
@@ -12,9 +12,14 @@ export interface StoreSalesRow {
   projThisWeek: number | null;
   projNextWeek: number | null;
   pacePct: number | null; // week-to-date vs projected-to-date (completed days)
+  intradayPacePct: number | null; // today's sales vs forecast-to-this-hour
+  projFinishToday: number | null; // where today lands at current pace
+  projDayToday: number | null; // today's full-day forecast
   yoyPct: number | null; // completed days vs last year same days
   lyHasData: boolean;
+  dayProgressPct: number | null; // how much of today's forecast has accrued by now
   todayLaborPct: number | null;
+  todayLaborCost: number;
   laborTargetPct: number;
   notes: string[];
   computedAt: string | null;
@@ -36,9 +41,13 @@ export interface SalesDashboardData {
     laborTargetPct: number;
     yoyPct: number | null;
     pacePct: number | null;
+    intradayPacePct: number | null;
+    projFinishToday: number | null;
+    projDayToday: number | null;
   };
   hourly: HourlyData | null;
   week: { days: WeekDayBar[]; todayIndex: number } | null;
+  watchlist: Array<{ guid: string; name: string; issues: string[] }>;
   stores: StoreSalesRow[];
 }
 
@@ -62,17 +71,66 @@ export function SalesDashboard({ data }: { data: SalesDashboardData }) {
           {data.userName ? `, ${data.userName}` : ""}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          All stores · {money.format(c.todaySales)} today · {money.format(c.wtdSales)} week to date
+          All stores · {money.format(c.todaySales)} today
+          {c.intradayPacePct != null ? (
+            <>
+              {" · "}
+              <span className={toneClass(paceTone(c.intradayPacePct))}>{paceLabel(c.intradayPacePct)}</span>
+            </>
+          ) : null}
+          {c.projFinishToday != null ? ` · on track for ~${money.format(c.projFinishToday)}` : ""}
         </p>
       </section>
 
-      {/* Combined KPIs */}
+      {/* Needs attention today */}
+      {data.watchlist.length > 0 ? (
+        <section className="dash-rise rounded-xl border border-warning/40 bg-warning/5 p-3">
+          <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-warning-foreground">
+            <AlertTriangle className="h-4 w-4" /> Needs attention today
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {data.watchlist.map((w) => (
+              <div key={w.guid} className="flex items-center gap-1.5 rounded-lg border border-warning/30 bg-card px-2.5 py-1.5 text-xs">
+                <span className="font-medium">{shortName(w.name)}</span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-warning-foreground">{w.issues.join(" · ")}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : data.anyForecast ? (
+        <section className="dash-rise flex items-center gap-2 rounded-xl border border-success/30 bg-success/5 px-3 py-2 text-xs text-success">
+          <CheckCircle2 className="h-4 w-4" /> All stores tracking to plan.
+        </section>
+      ) : null}
+
+      {/* Combined KPIs — today-first */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-        <Kpi label="Today's sales" value={money.format(c.todaySales)} icon={<DollarSign className="h-4 w-4" />} />
+        <Kpi label="Today's sales" value={money.format(c.todaySales)} sub={`of ${c.projDayToday != null ? money.format(c.projDayToday) : "—"} forecast`} icon={<DollarSign className="h-4 w-4" />} />
+        <Kpi
+          label="vs plan (today)"
+          value={c.intradayPacePct != null ? pct(c.intradayPacePct - 100) : "—"}
+          valueTone={paceTone(c.intradayPacePct)}
+          sub={c.intradayPacePct != null ? "vs forecast by now" : "forecast pending"}
+          icon={c.intradayPacePct != null && c.intradayPacePct < 100 ? <TrendingDown className="h-4 w-4" /> : <TrendingUp className="h-4 w-4" />}
+        />
+        <Kpi
+          label="On track for"
+          value={c.projFinishToday != null ? money.format(c.projFinishToday) : "—"}
+          sub="projected finish today"
+          icon={<Target className="h-4 w-4" />}
+        />
+        <Kpi
+          label="Labor % (today)"
+          value={c.laborPct != null ? `${c.laborPct.toFixed(1)}%` : "—"}
+          valueTone={laborTone(c.laborPct, c.laborTargetPct)}
+          sub={`target ${c.laborTargetPct}% · so far`}
+          icon={<Users className="h-4 w-4" />}
+        />
         <Kpi
           label="Projected this week"
           value={c.projThisWeek != null ? money.format(c.projThisWeek) : "—"}
-          sub={c.pacePct != null ? paceLabel(c.pacePct) : "pace pending"}
+          sub={c.pacePct != null ? paceLabel(c.pacePct) : "pace builds through week"}
           subTone={paceTone(c.pacePct)}
           icon={<CalendarRange className="h-4 w-4" />}
         />
@@ -83,19 +141,6 @@ export function SalesDashboard({ data }: { data: SalesDashboardData }) {
           sub={c.yoyPct != null ? "week to date" : "no last-year data"}
           icon={c.yoyPct != null && c.yoyPct < 0 ? <TrendingDown className="h-4 w-4" /> : <TrendingUp className="h-4 w-4" />}
         />
-        <Kpi
-          label="Labor % (today)"
-          value={c.laborPct != null ? `${c.laborPct.toFixed(1)}%` : "—"}
-          valueTone={laborTone(c.laborPct, c.laborTargetPct)}
-          sub={`target ${c.laborTargetPct}%`}
-          icon={<Users className="h-4 w-4" />}
-        />
-        <Kpi
-          label="Projected next week"
-          value={c.projNextWeek != null ? money.format(c.projNextWeek) : "—"}
-          icon={<CalendarRange className="h-4 w-4" />}
-        />
-        <Kpi label="Week to date" value={money.format(c.wtdSales)} icon={<DollarSign className="h-4 w-4" />} />
       </div>
 
       {/* Charts */}
@@ -126,10 +171,10 @@ export function SalesDashboard({ data }: { data: SalesDashboardData }) {
                 <Th className="pl-4">Store</Th>
                 <Th align="right">Today</Th>
                 <Th>Hourly</Th>
+                <Th align="right">vs plan</Th>
+                <Th align="right">Finish</Th>
                 <Th align="right">Week to date</Th>
-                <Th align="right">Pace</Th>
                 <Th align="right">This wk proj.</Th>
-                <Th align="right">Next wk proj.</Th>
                 <Th align="right">YoY</Th>
                 <Th align="right" className="pr-4">Labor %</Th>
               </tr>
@@ -140,14 +185,14 @@ export function SalesDashboard({ data }: { data: SalesDashboardData }) {
                   <td className="py-2.5 pl-4 font-medium">{shortName(s.name)}</td>
                   <Td align="right">{money.format(s.todaySales)}</Td>
                   <td className="px-2 py-2.5"><Sparkline values={s.sparkline} /></td>
-                  <Td align="right">{money.format(s.wtdSales)}</Td>
                   <Td align="right">
-                    <span className={cn("tabular-nums", toneClass(paceTone(s.pacePct)))}>
-                      {s.pacePct != null ? `${Math.round(s.pacePct)}%` : "—"}
+                    <span className={cn("tabular-nums", toneClass(paceTone(s.intradayPacePct)))}>
+                      {s.intradayPacePct != null ? pct(s.intradayPacePct - 100) : "—"}
                     </span>
                   </Td>
+                  <Td align="right">{s.projFinishToday != null ? money.format(s.projFinishToday) : "—"}</Td>
+                  <Td align="right">{money.format(s.wtdSales)}</Td>
                   <Td align="right">{s.projThisWeek != null ? money.format(s.projThisWeek) : "—"}</Td>
-                  <Td align="right">{s.projNextWeek != null ? money.format(s.projNextWeek) : "—"}</Td>
                   <Td align="right">
                     {s.yoyPct != null ? (
                       <span className={cn("inline-flex items-center gap-0.5 tabular-nums", s.yoyPct >= 0 ? "text-success" : "text-destructive")}>

@@ -59,6 +59,25 @@ export async function SalesDashboardServer() {
   }
   const nowHour = base.hour + base.minute / 60;
 
+  // Projected sales accrued by "now" (full past hours + a slice of the current
+  // one). Lets us compare today's live sales to where the forecast says we
+  // should be at this exact hour — the daily pace question.
+  const cumToNow = (hours: number[]): number => {
+    let s = 0;
+    for (let h = startHour; h <= endHour; h++) {
+      if (h + 1 <= nowHour) s += hours[h] ?? 0;
+      else if (h < nowHour) s += (hours[h] ?? 0) * (nowHour - h);
+    }
+    return s;
+  };
+  // Project today's finish from current pace: scale the full-day forecast by how
+  // far ahead/behind we are. Too-early (tiny denominator) just shows the plan.
+  const projectFinish = (actualToNow: number, projToNow: number, projDay: number): number | null => {
+    if (projDay <= 0) return null;
+    if (projToNow < projDay * 0.05) return Math.round(projDay);
+    return Math.round(projDay * (actualToNow / projToNow));
+  };
+
   const stores: StoreSalesRow[] = locations.map((loc) => {
     const week = weekByGuid[loc.guid];
     const fc = forecasts[loc.guid] ?? null;
@@ -77,6 +96,13 @@ export async function SalesDashboardServer() {
     const todayLaborCost = summary?.labor.laborCost ?? 0;
     const todayLaborPct = todaySales > 0 ? (todayLaborCost / todaySales) * 100 : null;
 
+    // Intra-day: today's sales vs plan-to-now, and where today lands.
+    const projHoursToday = fc?.thisWeek.days[todayWd]?.hours ?? null;
+    const projDayToday = projHoursToday ? projHoursToday.reduce((a, b) => a + b, 0) : null;
+    const projToNow = projHoursToday ? cumToNow(projHoursToday) : null;
+    const intradayPacePct = projToNow && projToNow > 0 ? (todaySales / projToNow) * 100 : null;
+    const projFinishToday = projDayToday != null && projToNow != null ? projectFinish(todaySales, projToNow, projDayToday) : null;
+
     return {
       guid: loc.guid,
       name: loc.name,
@@ -85,9 +111,14 @@ export async function SalesDashboardServer() {
       projThisWeek: fc ? fc.thisWeek.total : null,
       projNextWeek: fc ? fc.nextWeek.total : null,
       pacePct: projCompleted && projCompleted > 0 ? (wtdCompleted / projCompleted) * 100 : null,
+      intradayPacePct,
+      projFinishToday,
+      projDayToday: projDayToday != null ? Math.round(projDayToday) : null,
+      dayProgressPct: projDayToday && projDayToday > 0 && projToNow != null ? (projToNow / projDayToday) * 100 : null,
       yoyPct: lyCompleted && lyCompleted > 0 ? ((wtdCompleted - lyCompleted) / lyCompleted) * 100 : null,
       lyHasData: Boolean(fc?.lastYearThisWeek.hasData),
       todayLaborPct,
+      todayLaborCost: Math.round(todayLaborCost),
       laborTargetPct: targetFor(targets, loc.guid),
       notes: fc?.thisWeek.days.map((d) => d.note) ?? [],
       computedAt: fc?.computedAt ?? null,
@@ -96,6 +127,20 @@ export async function SalesDashboardServer() {
   });
 
   stores.sort((a, b) => b.todaySales - a.todaySales);
+
+  // "Needs attention today" synthesis — only once a store's day is underway
+  // (≥15% of the forecast accrued) so we don't flag the volatile early morning.
+  const signed = (v: number) => `${v >= 0 ? "+" : ""}${Math.round(v)}%`;
+  const watchlist = stores
+    .map((s) => {
+      const issues: string[] = [];
+      const underway = (s.dayProgressPct ?? 0) >= 15;
+      if (underway && s.intradayPacePct != null && s.intradayPacePct < 90) issues.push(`${signed(s.intradayPacePct - 100)} vs plan`);
+      if (underway && s.todayLaborPct != null && s.todayLaborPct > s.laborTargetPct + 5)
+        issues.push(`labor ${Math.round(s.todayLaborPct)}% vs ${s.laborTargetPct}%`);
+      return { guid: s.guid, name: s.name, issues };
+    })
+    .filter((w) => w.issues.length > 0);
 
   // Combined, YoY/pace only over stores that have a baseline.
   const wtdWithLY = stores.filter((s) => s.yoyPct != null);
@@ -120,6 +165,12 @@ export async function SalesDashboardServer() {
   }, 0);
 
   const anyForecast = Object.keys(forecasts).length > 0;
+
+  // Combined intra-day pace + projected finish (all stores).
+  const combinedProjDayToday = combinedProjHour.reduce((a, b) => a + b, 0);
+  const combinedProjToNow = cumToNow(combinedProjHour);
+  const combinedIntradayPace = combinedProjToNow > 0 ? (combinedTodaySales / combinedProjToNow) * 100 : null;
+  const combinedProjFinish = projectFinish(combinedTodaySales, combinedProjToNow, combinedProjDayToday);
 
   // ── Weekly projected vs actual vs last-year (combined) ──
   const weekDays = WEEKDAYS.map((weekday, d) => {
@@ -150,9 +201,13 @@ export async function SalesDashboardServer() {
       laborTargetPct: targets.defaultPct,
       yoyPct: combinedLYCompleted > 0 ? ((combinedWtdForYoY - combinedLYCompleted) / combinedLYCompleted) * 100 : null,
       pacePct: combinedProjCompleted > 0 ? (combinedWtdCompleted / combinedProjCompleted) * 100 : null,
+      intradayPacePct: combinedIntradayPace,
+      projFinishToday: combinedProjFinish,
+      projDayToday: anyForecast ? Math.round(combinedProjDayToday) : null,
     },
     hourly: { startHour, endHour, actual: combinedActualHour, projected: combinedProjHour, nowHour },
     week: { days: weekDays, todayIndex: todayWd },
+    watchlist,
     stores,
   };
 
